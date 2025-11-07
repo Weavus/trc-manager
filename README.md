@@ -5,8 +5,8 @@ TRC Manager is a Streamlit application and modular processing pipeline for handl
 ## Key Features
 - Upload multiple `.vtt` transcript files per incident.
 - Automatic incident file management (`data/incidents/INC*.json`).
-- Modular pipeline stages (vtt_cleanup, refinement, people_extraction, summarisation, keyword_extraction, master_summary).
-- Configurable dialogue-only text replacement during refinement.
+- Modular pipeline stages (transcription_parsing, text_enhancement, noise_reduction, participant_analysis, summarisation, keyword_extraction, master_summary_synthesis).
+- Configurable dialogue-only text replacement and filler removal (enhancement + noise reduction).
 - Artifact persistence (text + JSON) under `data/artifacts/`.
 - People directory aggregation with discovered roles & knowledge.
 - Interactive editing of titles, summaries, people metadata, and configuration.
@@ -64,8 +64,8 @@ Configuration changes:
 Re-run behavior:
 - Downstream dependencies updated: summarisation/keyword_extraction now require `noise_reduction` instead of refinement.
 
-Deprecation:
-- Legacy stage modules remain with docstrings marked DEPRECATED and will be removed in a future cleanup release.
+Deprecation Cleanup:
+- Legacy stage modules (`vtt_cleanup`, `refinement`, `people_extraction`, `master_summary`) have been removed. Use only the new stages listed above. Historical references in existing incidents are still honored via migrated output keys.
 
 ## Pipeline Overview
 Each stage implements `Stage.run(ctx, params)` returning `StageOutput` objects containing:
@@ -89,12 +89,12 @@ The Configuration page lets you:
 - Edit per-stage JSON params.
 - Clear the people directory.
 
-### Refinement `replacement_rules`
-The refinement stage supports hierarchical `replacement_rules` under `stages.refinement.params.replacement_rules` in `config.json`. Structure is nested categories mapping case-insensitive substrings to their standardized replacements. All nested dictionaries are flattened and applied longest-key first to reduce partial overlap issues.
+### Text Enhancement `replacement_rules`
+The text enhancement stage supports hierarchical `replacement_rules` under `stages.text_enhancement.params.replacement_rules` in `config.json`. Structure is nested categories mapping case-insensitive substrings to their standardized replacements. All nested dictionaries are flattened and applied longest-key first to reduce partial overlap issues.
 
 Example snippet:
 ```json
-"refinement": {
+"text_enhancement": {
   "enabled": true,
   "params": {
     "replacement_rules": {
@@ -102,7 +102,7 @@ Example snippet:
         "cloud era": "Cloudera",
         "octa": "Okta"
       },
-      "filler_words_to_standardize_or_remove": {
+      "standardizations": {
         "uh": "",
         "Umm": ""
       }
