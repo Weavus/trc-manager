@@ -85,20 +85,98 @@ def init_state() -> None:
 
 def sidebar_nav() -> None:
     with st.sidebar:
-        st.title("TRC Manager")
-        pages = ["TRC Upload", "TRC Library", "People Directory", "Configuration"]
-        current = st.session_state.get("page", pages[0])
-        for p in pages:
-            is_active = p == current
-            label = ("• " + p) if is_active else p
-            if st.button(
-                label,
-                key=f"nav_{p.replace(' ', '_').lower()}",
-                use_container_width=True,
-                disabled=is_active,
-            ):
-                st.session_state["page"] = p
-                st.rerun()
+        # Header section with branding
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            st.markdown("## 🔧 TRC Manager")
+            st.caption("Technical Recovery Call Processor")
+        with col2:
+            # Status indicator
+            total_incidents = len(list_incidents())
+            st.metric("Incidents", total_incidents, delta=None, delta_color="normal")
+
+        st.divider()
+
+        # Navigation sections
+        nav_items = [
+            {
+                "name": "TRC Upload",
+                "icon": "📤",
+                "description": "Upload and process new TRC files",
+                "badge": None
+            },
+            {
+                "name": "TRC Library",
+                "icon": "📚",
+                "description": "Browse and manage processed TRCs",
+                "badge": f"{total_incidents} incidents"
+            },
+            {
+                "name": "People Directory",
+                "icon": "👥",
+                "description": "Manage participant information",
+                "badge": f"{len(load_people_directory())} people"
+            },
+            {
+                "name": "Configuration",
+                "icon": "⚙️",
+                "description": "System settings and pipeline config",
+                "badge": None
+            }
+        ]
+
+        current = st.session_state.get("page", nav_items[0]["name"])
+
+        # Navigation buttons with improved styling
+        for item in nav_items:
+            is_active = item["name"] == current
+
+            # Create button with custom styling
+            button_label = f"{item['icon']} {item['name']}"
+            if item["badge"]:
+                button_label += f" ({item['badge']})"
+
+            # Use different styling for active vs inactive
+            if is_active:
+                st.markdown(f"""
+                <div style="
+                    background-color: #e3f2fd;
+                    border-left: 4px solid #1976d2;
+                    padding: 12px 16px;
+                    border-radius: 0 8px 8px 0;
+                    margin: 4px 0;
+                    font-weight: 600;
+                    color: #1976d2;
+                ">
+                    {item['icon']} {item['name']} {f"({item['badge']})" if item["badge"] else ""}
+                </div>
+                """, unsafe_allow_html=True)
+                st.caption(f"📍 {item['description']}")
+            else:
+                if st.button(
+                    button_label,
+                    key=f"nav_{item['name'].replace(' ', '_').lower()}",
+                    use_container_width=True,
+                    help=item["description"]
+                ):
+                    st.session_state["page"] = item["name"]
+                    st.rerun()
+
+        st.divider()
+
+        # Quick actions section
+        st.markdown("### 🚀 Quick Actions")
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("📊 Stats", help="View system statistics"):
+                st.info("Feature coming soon!")
+        with col2:
+            if st.button("🔍 Search", help="Search across all content"):
+                st.info("Feature coming soon!")
+
+        # Footer
+        st.markdown("---")
+        st.caption("v0.1.0 | Built with Streamlit")
 
 
 def page_upload() -> None:
