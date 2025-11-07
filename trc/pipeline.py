@@ -95,6 +95,13 @@ def setup_logging(log_path: Path = Path("app.log"), level: str = "INFO") -> None
     llm_logger = logging.getLogger("trc.llm")
     llm_logger.setLevel(logging.DEBUG)
 
+    # Create dedicated LLM log file
+    llm_log_path = Path("llm.log")
+    llm_file_handler = logging.FileHandler(llm_log_path)
+    llm_file_handler.setLevel(logging.DEBUG)
+    llm_file_handler.setFormatter(file_formatter)
+    llm_logger.addHandler(llm_file_handler)
+
     # Create a separate console handler for LLM debug messages
     llm_console_handler = logging.StreamHandler()
     llm_console_handler.setLevel(logging.DEBUG)
