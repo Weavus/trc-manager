@@ -39,6 +39,25 @@ def _format_chars_and_size(text: str) -> str:
         return ""
 
 
+def _format_trc_datetime(iso_datetime: str) -> str:
+    """Format ISO datetime to 'Wednesday 5th June 2025 18:01' format."""
+    try:
+        # Parse ISO datetime (e.g., "2025-06-05T10:01:00Z")
+        dt = datetime.fromisoformat(iso_datetime.replace('Z', '+00:00'))
+        # Format as requested
+        day_name = dt.strftime('%A')  # Wednesday
+        day = dt.day
+        # Add ordinal suffix
+        suffix = 'th' if 11 <= day <= 13 else {1: 'st', 2: 'nd', 3: 'rd'}.get(day % 10, 'th')
+        day_with_suffix = f"{day}{suffix}"
+        month_name = dt.strftime('%B')  # June
+        year = dt.year
+        time_24h = dt.strftime('%H:%M')  # 18:01
+        return f"{day_name} {day_with_suffix} {month_name} {year} {time_24h}"
+    except Exception:
+        return iso_datetime  # Fallback to original if parsing fails
+
+
 def _copy_script(content: str) -> None:
     try:
         js = json.dumps(content or "")
@@ -585,7 +604,12 @@ def page_library() -> None:
             if not trcs:
                 st.info("No TRCs for this incident")
                 continue
-            tab_labels = [f"Call {i + 1}: {t.get('start_time')}" for i, t in enumerate(trcs)]
+            # Sort TRCs by start_time (oldest first)
+            trcs = sorted(trcs, key=lambda t: t.get('start_time', ''))
+            tab_labels = [
+                f"TRC {i + 1}: {_format_trc_datetime(t.get('start_time', ''))}"
+                for i, t in enumerate(trcs)
+            ]
             tabs = st.tabs(tab_labels)
             for _idx, (tab, trc) in enumerate(zip(tabs, trcs, strict=False)):
                 with tab:
