@@ -103,6 +103,23 @@ def sidebar_nav() -> None:
 
 def page_upload() -> None:
     st.header("TRC Upload")
+
+    # Initialize session state for tracking processed files
+    if "processed_files" not in st.session_state:
+        st.session_state.processed_files = set()
+
+    # Add a button to clear processed files list
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        st.subheader("Upload TRC Files")
+    with col2:
+        if st.button(
+            "Clear Processed List",
+            help="Clear the list of processed files to allow re-uploading"
+        ):
+            st.session_state.processed_files.clear()
+            st.rerun()
+
     files = st.file_uploader(
         "Upload one or more TRC .vtt files",
         type=["vtt"],
@@ -111,6 +128,33 @@ def page_upload() -> None:
     if not files:
         st.info("Select .vtt files to process.")
         return
+
+    # Filter out already processed files
+    unprocessed_files = []
+    skipped_files = []
+    for up in files:
+        # Create a unique identifier for the file based on name and content hash
+        content = up.read()
+        file_id = f"{up.name}_{hash(content)}"
+        up.seek(0)  # Reset file pointer after reading
+
+        if file_id not in st.session_state.processed_files:
+            unprocessed_files.append(up)
+        else:
+            skipped_files.append(up.name)
+
+    # Show feedback about skipped files
+    if skipped_files:
+        st.info(
+            f"Skipping {len(skipped_files)} already processed file(s): {', '.join(skipped_files)}"
+        )
+
+    if not unprocessed_files:
+        st.success("All selected files have already been processed!")
+        return
+
+    files = unprocessed_files
+    st.info(f"Processing {len(files)} file(s)...")
 
     for up in files:
         name = up.name
@@ -208,6 +252,10 @@ def page_upload() -> None:
             result = process_pipeline(content.decode("utf-8", errors="ignore"), inc_id, start_iso)
         if result.success:
             st.success(f"Successfully processed {inc_id}!")
+            # Mark this file as processed
+            file_id = f"{name}_{hash(content)}"
+            st.session_state.processed_files.add(file_id)
+
             # update incident file with origin meta
             inc = json.loads(inc_path.read_text())
             trc = next(t for t in inc["trcs"] if t["trc_id"] == result.trc_id)

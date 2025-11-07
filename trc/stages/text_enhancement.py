@@ -10,7 +10,9 @@ from .base import RunContext, StageOutput
 
 class TextEnhancementStage:
     name = "text_enhancement"
-    requires = ["transcription_parsing"]
+    inputs = ["transcription_parsing"]
+    outputs = ["text_enhancement"]
+    depends_on = []
 
     def run(self, ctx: RunContext, params: dict[str, Any] | None = None) -> StageOutput:
         parsed = ctx.trc.get("pipeline_outputs", {}).get("transcription_parsing", "")

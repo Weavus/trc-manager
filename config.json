@@ -1,9 +1,17 @@
 {
+  "llm": {
+    "provider": {
+      "type": "openai",
+      "api_key": "${OPENAI_API_KEY}",
+      "base_url": null
+    }
+  },
   "pipeline_order": [
     "transcription_parsing",
     "text_enhancement",
     "noise_reduction",
-    "participant_analysis",
+    "participant_role_analysis",
+    "participant_knowledge_analysis",
     "keyword_extraction",
     "summarisation",
     "master_summary_synthesis"
@@ -153,17 +161,34 @@
     "noise_reduction": {
       "enabled": true,
       "params": {
-        "extra_fillers": []
+        "extra_fillers": [],
+        "llm": {
+          "prompt_file": "trc/prompts/noise_reduction.md"
+        }
       }
     },
-    "participant_analysis": {
+    "participant_role_analysis": {
       "enabled": true,
-      "params": {}
+      "params": {
+        "llm": {
+          "prompt_file": "trc/prompts/participant_role_analysis.md"
+        }
+      }
+    },
+    "participant_knowledge_analysis": {
+      "enabled": true,
+      "params": {
+        "llm": {
+          "prompt_file": "trc/prompts/participant_knowledge_analysis.md"
+        }
+      }
     },
     "summarisation": {
       "enabled": true,
       "params": {
-        "llm_model": "placeholder"
+        "llm": {
+          "prompt_file": "trc/prompts/summarisation.md"
+        }
       }
     },
     "keyword_extraction": {
@@ -172,7 +197,11 @@
     },
     "master_summary_synthesis": {
       "enabled": true,
-      "params": {}
+      "params": {
+        "llm": {
+          "prompt_file": "trc/prompts/master_summary_synthesis.md"
+        }
+      }
     }
   }
 }

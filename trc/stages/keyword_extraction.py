@@ -8,7 +8,9 @@ from .base import RunContext, StageOutput
 
 class KeywordExtractionStage:
     name = "keyword_extraction"
-    requires = ["noise_reduction"]
+    inputs = ["noise_reduction"]
+    outputs = ["keyword_extraction"]
+    depends_on = []
 
     def run(self, ctx: RunContext, params: dict[str, Any] | None = None) -> StageOutput:
         text = ctx.trc.get("pipeline_outputs", {}).get("noise_reduction", "")

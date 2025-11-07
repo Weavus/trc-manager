@@ -4,12 +4,15 @@ import contextlib
 import re
 from typing import Any
 
+from ..llm import create_client_from_config
 from .base import RunContext, StageOutput
 
 
 class NoiseReductionStage:
     name = "noise_reduction"
-    requires = ["text_enhancement"]
+    inputs = ["text_enhancement"]
+    outputs = ["noise_reduction"]
+    depends_on = []
 
     FILLER_PATTERNS = [
         r"\buh\b",
@@ -30,6 +33,38 @@ class NoiseReductionStage:
             )
 
         cfg = params or {}
+        llm_config = cfg.get("llm")
+
+        if llm_config:
+            # Use LLM for noise reduction
+            try:
+                llm_client = create_client_from_config(ctx.incident.get("llm", {}))
+                prompt_file = llm_config["prompt_file"]
+
+                # For noise reduction, we need to provide known_terms and transcript
+                # Get known terms from text_enhancement stage or use empty
+                known_terms = ctx.trc.get("pipeline_outputs", {}).get("text_enhancement", "")
+                if not known_terms:
+                    known_terms = "No specific terms provided."
+
+                cleaned_text = llm_client.call_llm_with_prompt_file(
+                    prompt_file=prompt_file,
+                    known_terms=known_terms,
+                    transcript=text,
+                ).strip()
+
+                return StageOutput(
+                    trc_outputs={"noise_reduction": cleaned_text},
+                    trc_artifacts_text={"noise_reduction_llm_output": cleaned_text},
+                    input_info=f"Input: {len(text)} chars",
+                    output_info=f"Output: {len(cleaned_text)} chars (LLM processed)",
+                    messages=["Used LLM for noise reduction"],
+                )
+            except Exception as e:
+                # Fallback to regex-based approach if LLM fails
+                print(f"LLM noise reduction failed: {e}, falling back to regex")
+
+        # Fallback: regex-based noise reduction
         filler_patterns = list(self.FILLER_PATTERNS)
         for p in cfg.get("extra_fillers", []):
             with contextlib.suppress(Exception):

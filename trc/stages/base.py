@@ -40,8 +40,12 @@ class StageOutput:
 
 class Stage(Protocol):
     name: str
-    # Keys from trc["pipeline_outputs"] that this stage requires ("raw_vtt" allowed)
-    requires: list[str]
+    # Pipeline output keys that this stage consumes as inputs
+    inputs: list[str]
+    # Pipeline output keys that this stage produces as outputs
+    outputs: list[str]
+    # Stage names that must complete before this stage can run (for ordering)
+    depends_on: list[str]
 
     def run(self, ctx: RunContext, params: dict[str, Any] | None = None) -> StageOutput:  # noqa: D401
         """Execute the stage and return structured outputs/artifacts."""

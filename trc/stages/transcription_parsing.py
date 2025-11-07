@@ -18,7 +18,9 @@ class VTTDialogueSegment(TypedDict):
 
 class TranscriptionParsingStage:
     name = "transcription_parsing"
-    requires = ["raw_vtt"]
+    inputs = ["raw_vtt"]
+    outputs = ["transcription_parsing"]
+    depends_on = []
 
     FOUR_HOURS_TD = timedelta(hours=4)
 
@@ -188,9 +190,7 @@ class TranscriptionParsingStage:
             return None
 
     @staticmethod
-    def generate_display_name(
-        raw_name: str
-    ) -> str:
+    def generate_display_name(raw_name: str) -> str:
         """
         Generates a display-friendly name from a raw name string.
         - Reverses "Lastname, Firstnames" format.
@@ -208,17 +208,17 @@ class TranscriptionParsingStage:
         if name_to_process == "@1":
             name_to_process = "Unknown Speaker"
 
-        name_to_process = re.sub(r'\s*\([^)]*\)$', '', name_to_process).strip()
+        name_to_process = re.sub(r"\s*\([^)]*\)$", "", name_to_process).strip()
 
-        if ',' in name_to_process:
-            parts = [part.strip() for part in name_to_process.split(',', 1)]
+        if "," in name_to_process:
+            parts = [part.strip() for part in name_to_process.split(",", 1)]
             if len(parts) == 2:
                 name_to_process = f"{parts[1]} {parts[0]}"
 
         words_for_structure = name_to_process.strip().split()
         if not words_for_structure:
             return ""
-        name_to_process_standard_space = ' '.join(words_for_structure)
+        name_to_process_standard_space = " ".join(words_for_structure)
 
         name_parts_structured = name_to_process_standard_space.split()
         if len(name_parts_structured) > 2:
@@ -229,7 +229,7 @@ class TranscriptionParsingStage:
         words_final = processed_name.strip().split()
         if not words_final:
             return ""
-        final_display_name = ' '.join(words_final).title()
+        final_display_name = " ".join(words_final).title()
 
         return final_display_name.strip()
 

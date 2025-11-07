@@ -9,6 +9,7 @@ dependencies = [
   "streamlit>=1.36.0",
   "st-diff-viewer",
   "streamlit-sortables",
+  "openai>=1.0.0",
 ]
 
 [dependency-groups]

@@ -127,16 +127,29 @@ def load_stage_registry() -> tuple[dict[str, Stage], dict[str, dict[str, Any]]]:
     for item in spec.get("stages", []):
         name = item.get("name")
         impl = item.get("impl")
-        requires = item.get("requires")
+        inputs = item.get("inputs")
+        outputs = item.get("outputs")
+        depends_on = item.get("depends_on")
         if not name or not impl:
             continue
         cls = _import_from_path(impl)
         inst: Stage = cls()  # type: ignore[call-arg]
-        if requires is not None:
-            if isinstance(requires, (list, tuple)):
-                inst.requires = [str(r) for r in requires]
+        # Override stage attributes if specified in stages.json
+        if inputs is not None:
+            if isinstance(inputs, (list, tuple)):
+                inst.inputs = [str(i) for i in inputs]
             else:
-                LOGGER.warning("Stage %s has invalid 'requires' in stages.json", name)
+                LOGGER.warning("Stage %s has invalid 'inputs' in stages.json", name)
+        if outputs is not None:
+            if isinstance(outputs, (list, tuple)):
+                inst.outputs = [str(o) for o in outputs]
+            else:
+                LOGGER.warning("Stage %s has invalid 'outputs' in stages.json", name)
+        if depends_on is not None:
+            if isinstance(depends_on, (list, tuple)):
+                inst.depends_on = [str(d) for d in depends_on]
+            else:
+                LOGGER.warning("Stage %s has invalid 'depends_on' in stages.json", name)
         registry[name] = inst
         if item.get("params"):
             params_map[name] = dict(item["params"])  # baseline params
@@ -178,23 +191,67 @@ def load_stage_registry() -> tuple[dict[str, Stage], dict[str, dict[str, Any]]]:
 
 
 def _build_dependency_graph(registry: dict[str, Stage], enabled: set[str]) -> dict[str, set[str]]:
-    """Build a dependency graph from stage.requires.
+    """Build a dependency graph from stage inputs, outputs, and depends_on.
 
     Returns mapping: stage -> set(prereq_stage_names)
     """
     graph: dict[str, set[str]] = {s: set() for s in enabled if s in registry}
-    for s, stage in registry.items():
-        if s not in graph:
+
+    # Build output-to-stage mapping for data dependencies
+    output_producers: dict[str, set[str]] = {}
+    for stage_name, stage in registry.items():
+        if stage_name not in enabled:
             continue
-        for req in getattr(stage, "requires", []) or []:
-            if req == "raw_vtt":
+        for output in getattr(stage, "outputs", []):
+            output_producers.setdefault(output, set()).add(stage_name)
+
+    # Build dependencies
+    for stage_name, stage in registry.items():
+        if stage_name not in graph:
+            continue
+
+        # Explicit stage dependencies
+        for dep in getattr(stage, "depends_on", []):
+            if dep in graph:
+                graph[stage_name].add(dep)
+
+        # Data dependencies based on inputs
+        for input_key in getattr(stage, "inputs", []):
+            if input_key == "raw_vtt":
                 continue
-            if req in graph:
-                graph[s].add(req)
-            else:
-                # record unknown prereq by keeping it in set for validation
-                graph[s].add(req)
+            # Find stages that produce this input
+            producers = output_producers.get(input_key, set())
+            for producer in producers:
+                if producer in graph and producer != stage_name:
+                    graph[stage_name].add(producer)
+
     return graph
+
+
+def _validate_stage_inputs(registry: dict[str, Stage], enabled: set[str]) -> list[str]:
+    """Validate that all stage inputs are produced by some enabled stage.
+
+    Returns list of error messages.
+    """
+    errors: list[str] = []
+
+    # Collect all available outputs
+    available_outputs: set[str] = {"raw_vtt"}  # raw_vtt is always available
+    for stage_name, stage in registry.items():
+        if stage_name in enabled:
+            available_outputs.update(getattr(stage, "outputs", []))
+
+    # Check each stage's inputs
+    for stage_name, stage in registry.items():
+        if stage_name not in enabled:
+            continue
+        for input_key in getattr(stage, "inputs", []):
+            if input_key not in available_outputs:
+                errors.append(
+                    f"Stage '{stage_name}' requires input '{input_key}' but no enabled stage produces it"
+                )
+
+    return errors
 
 
 def _toposort_respecting_order(order: list[str], graph: dict[str, set[str]]) -> list[str]:
@@ -213,7 +270,7 @@ def _toposort_respecting_order(order: list[str], graph: dict[str, set[str]]) -> 
     for s in nodes:
         for p in graph[s]:
             if p not in present:
-                errors.append(f"Stage '{s}' requires missing or disabled '{p}'")
+                errors.append(f"Stage '{s}' depends on missing or disabled '{p}'")
             else:
                 indeg[s] += 1
                 adj[p].add(s)
@@ -310,6 +367,10 @@ def process_pipeline(
         },
     )
 
+    # Add LLM config to incident for stages to access
+    if "llm" in config:
+        incident["llm"] = config["llm"]
+
     trc_id = f"trc_{start_time_iso}"
     trc = next((t for t in incident.get("trcs", []) if t.get("trc_id") == trc_id), None)
     if not trc:
@@ -369,6 +430,19 @@ def process_pipeline(
         if config.get("stages", {}).get(s, {}).get("enabled", True)
     ]
 
+    # Validate stage inputs and dependencies
+    input_errors = _validate_stage_inputs(registry, set(enabled_order))
+    if input_errors:
+        msg = f"Pipeline configuration error: {'; '.join(input_errors)}"
+        LOGGER.error(msg)
+        return PipelineResult(
+            incident_id=incident_id,
+            trc_id=f"trc_{start_time_iso}",
+            stage_logs=[StageLog("config", "Failed", 0.0, messages=input_errors)],
+            success=False,
+            failed_stage="config",
+        )
+
     # Validate and topologically sort the enabled order
     dep_graph = _build_dependency_graph(registry, set(enabled_order))
     try:
@@ -403,6 +477,25 @@ def process_pipeline(
                 StageLog(stage_name, "Skipped", 0.0, messages=["Unknown stage, skipped"])
             )
             continue
+
+        # Validate that required inputs are available
+        missing_inputs = []
+        for input_key in getattr(stage, "inputs", []):
+            if input_key not in trc.get("pipeline_outputs", {}):
+                missing_inputs.append(input_key)
+
+        if missing_inputs:
+            error_msg = f"Missing required inputs: {', '.join(missing_inputs)}"
+            stage_logs.append(
+                StageLog(stage_name, "Failed", time.perf_counter() - t0, messages=[error_msg])
+            )
+            return PipelineResult(
+                incident_id=incident_id,
+                trc_id=trc_id,
+                stage_logs=stage_logs,
+                success=False,
+                failed_stage=stage_name,
+            )
 
         # Build run context
         ctx = RunContext(
