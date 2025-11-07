@@ -420,12 +420,6 @@ def process_uploaded_files(files):
             trc["file_hash"] = new_hash
             inc_path.write_text(json.dumps(inc, indent=2))
 
-            # Navigation option
-            if st.button(f"📚 View {inc_id} in Library", key=f"view_{inc_id}_{name}"):
-                st.session_state["page"] = "TRC Library"
-                st.session_state["filters"]["incident_ids"] = [inc_id]
-                st.rerun()
-
         else:
             st.error(f"❌ **{name}**: Processing failed for {inc_id} at stage {result.failed_stage}")
 
@@ -553,11 +547,6 @@ def process_uploaded_files(files):
             trc["original_filepath"] = str(save_path)
             trc["file_hash"] = new_hash
             inc_path.write_text(json.dumps(inc, indent=2))
-
-            if st.button("View Incident in Library"):
-                st.session_state["page"] = "TRC Library"
-                st.session_state["filters"]["incident_ids"] = [inc_id]
-                st.rerun()
 
             # Stage logs expanders
             st.subheader("Pipeline Stages")
