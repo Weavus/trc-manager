@@ -12,7 +12,6 @@ from trc.pipeline import (
     CONFIG_PATH,
     DATA_DIR,
     INCIDENTS_DIR,
-    PEOPLE_PATH,
     list_incidents,
     load_people_directory,
     process_pipeline,
@@ -976,7 +975,12 @@ def page_config() -> None:
         "Confirm delete ALL people (roles & knowledge will be lost).",
         key="confirm_del_all_people",
     )
-    if st.button("Delete ALL People", disabled=not confirm_del_all_people, key="btn_delete_all_people"):
+    btn_delete_all_people = st.button(
+        "Delete ALL People",
+        disabled=not confirm_del_all_people,
+        key="btn_delete_all_people",
+    )
+    if btn_delete_all_people:
         save_people_directory({})
         st.success("People directory cleared")
         st.rerun()
@@ -1016,11 +1020,14 @@ def page_config() -> None:
         "Confirm delete ALL incidents, TRCs, artifacts & uploads.",
         key="confirm_del_all_incidents",
     )
-    if st.button(
-        "Delete ALL Incidents & TRCs",
-        disabled=not confirm_del_all_incidents,
-        key="btn_delete_all_incidents",
-    ) and confirm_del_all_incidents:
+    if (
+        st.button(
+            "Delete ALL Incidents & TRCs",
+            disabled=not confirm_del_all_incidents,
+            key="btn_delete_all_incidents",
+        )
+        and confirm_del_all_incidents
+    ):
         # Remove incident JSONs
         for f in INCIDENTS_DIR.glob("*.json"):
             with contextlib.suppress(Exception):
@@ -1034,6 +1041,7 @@ def page_config() -> None:
                     with contextlib.suppress(Exception):
                         if p.is_dir():
                             import shutil
+
                             shutil.rmtree(p, ignore_errors=True)
                         else:
                             p.unlink(missing_ok=True)  # type: ignore[arg-type]
