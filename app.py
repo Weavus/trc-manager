@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 import streamlit as st
+from st_diff_viewer import diff_viewer
 
 from trc.pipeline import (
     CONFIG_PATH,
@@ -237,6 +238,17 @@ def page_upload() -> None:
 
                     in_col, out_col = st.columns(2)
                     stage = log.name
+                    text_enhancement_diffs_data = None
+
+                    # Helper mapping for stage input/output keys
+                    input_key_map: dict[str, str] = {
+                        "transcription_parsing": "raw_vtt",
+                        "text_enhancement": "transcription_parsing",
+                        "noise_reduction": "text_enhancement",
+                        "participant_analysis": "noise_reduction",
+                        "summarisation": "noise_reduction",
+                        "keyword_extraction": "noise_reduction",
+                    }
 
                     # Inputs
                     with in_col:
@@ -370,32 +382,35 @@ def page_upload() -> None:
                             elif stage == "text_enhancement":
                                 artifact_keys = ["text_enhancement_diffs"]
                             for ak in artifact_keys:
-                                path = arts.get(ak)
-                                if not path:
-                                    continue
-                                try:
-                                    if (
-                                        ak.endswith("_raw")
-                                        or ak.endswith("_llm_output")
-                                        and path.endswith(".txt")
-                                    ) and path.endswith(".txt"):
-                                        with open(path, encoding="utf-8") as f:
-                                            raw = f.read()
-                                        st.text_area(
-                                            f"{ak} {_format_chars_and_size(raw)}",
-                                            value=raw,
-                                            height=400,
-                                            disabled=True,
-                                            key=f"art_{ak}_{trc_view.get('trc_id')}_{result.trc_id}",
-                                        )
-                                        out_text += "\n\n" + (raw or "")
-                                    elif path.endswith(".json"):
-                                        with open(path, encoding="utf-8") as f:
-                                            data = json.loads(f.read())
-                                        st.json(data)
-                                        out_text += "\n\n" + json.dumps(data, indent=2)
-                                except Exception:
-                                    st.caption(f"{ak}: (unavailable)")
+                                 path = arts.get(ak)
+                                 if not path:
+                                     continue
+                                 try:
+                                     if (
+                                         ak.endswith("_raw")
+                                         or ak.endswith("_llm_output")
+                                         and path.endswith(".txt")
+                                     ) and path.endswith(".txt"):
+                                         with open(path, encoding="utf-8") as f:
+                                             raw = f.read()
+                                         st.text_area(
+                                             f"{ak} {_format_chars_and_size(raw)}",
+                                             value=raw,
+                                             height=400,
+                                             disabled=True,
+                                             key=f"art_{ak}_{trc_view.get('trc_id')}_{result.trc_id}",
+                                         )
+                                         out_text += "\n\n" + (raw or "")
+                                     elif path.endswith(".json"):
+                                         with open(path, encoding="utf-8") as f:
+                                             data = json.loads(f.read())
+                                         if ak == "text_enhancement_diffs":
+                                             text_enhancement_diffs_data = data
+                                         else:
+                                             st.json(data)
+                                         out_text += "\n\n" + json.dumps(data, indent=2)
+                                 except Exception:
+                                     st.caption(f"{ak}: (unavailable)")
                         with hoc2:
                             if st.button(
                                 "📋",
@@ -404,6 +419,26 @@ def page_upload() -> None:
                             ):
                                 _copy_script(out_text or "")
                                 st.session_state[open_key] = True
+
+                    # Display text enhancement diffs full-width if present
+                    if text_enhancement_diffs_data and stage == "text_enhancement":
+                        total_reps = text_enhancement_diffs_data.get("total_replacements", 0)
+                        st.markdown(f"**Total replacements: {total_reps}**")
+                        changes = text_enhancement_diffs_data.get("changes", [])
+                        if changes:
+                            st.markdown("**Text Enhancement Differences:**")
+                            for i, change in enumerate(changes):
+                                hhmm = change.get("hhmm", "N/A")
+                                speaker = change.get("speaker", "N/A")
+                                with st.expander(
+                                    f"Change {i + 1}: {hhmm} - {speaker}",
+                                    expanded=False,
+                                ):
+                                    old_text = change.get("old_dialogue", "")
+                                    new_text = change.get("new_dialogue", "")
+                                    diff_viewer(old_text=old_text, new_text=new_text)
+                        else:
+                            st.caption("No changes recorded")
 
                     # Any log messages
                     for m in log.messages:
@@ -589,6 +624,7 @@ def page_library() -> None:
                     ):
                         with stage_tabs[_s]:
                             in_col, out_col = st.columns(2)
+                            text_enhancement_diffs_data = None
 
                             # Inputs
                             with in_col:
@@ -742,7 +778,10 @@ def page_library() -> None:
                                             elif path.endswith(".json"):
                                                 with open(path, encoding="utf-8") as f:
                                                     data = json.loads(f.read())
-                                                st.json(data)
+                                                if ak == "text_enhancement_diffs":
+                                                    text_enhancement_diffs_data = data
+                                                else:
+                                                    st.json(data)
                                                 out_text += "\n\n" + json.dumps(data, indent=2)
                                         except Exception:
                                             st.caption(f"{ak}: (unavailable)")
@@ -753,6 +792,24 @@ def page_library() -> None:
                                         help="Copy outputs to clipboard",
                                     ):
                                         _copy_script(out_text or "")
+
+                            # Display text enhancement diffs full-width if present
+                            if text_enhancement_diffs_data and tab_stage == "text_enhancement":
+                                total_reps = text_enhancement_diffs_data.get("total_replacements", 0)
+                                st.markdown(f"**Total replacements: {total_reps}**")
+                                changes = text_enhancement_diffs_data.get("changes", [])
+                                if changes:
+                                    st.markdown("**Text Enhancement Differences:**")
+                                    for i, change in enumerate(changes):
+                                        hhmm = change.get("hhmm", "N/A")
+                                        speaker = change.get("speaker", "N/A")
+                                        title = f"Change {i + 1}: {hhmm} - {speaker}"  # noqa: E501
+                                        with st.expander(title, expanded=False):
+                                            old_text = change.get("old_dialogue", "")
+                                            new_text = change.get("new_dialogue", "")
+                                            diff_viewer(old_text=old_text, new_text=new_text)
+                                else:
+                                    st.caption("No changes recorded")
 
                     # Rerun controls
                     st.divider()
