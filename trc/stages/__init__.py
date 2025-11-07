@@ -11,7 +11,7 @@ from .summarisation import SummarisationStage
 
 def get_builtin_registry() -> dict[str, Stage]:
     return {
-        "cleanup": CleanupStage(),
+        "vtt_cleanup": CleanupStage(),
         "refinement": RefinementStage(),
         "people_extraction": PeopleExtractionStage(),
         "summarisation": SummarisationStage(),

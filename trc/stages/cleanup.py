@@ -17,7 +17,7 @@ class VTTDialogueSegment(TypedDict):
 
 
 class CleanupStage:
-    name = "cleanup"
+    name = "vtt_cleanup"
     requires = ["raw_vtt"]
 
     _vtt_timestamp_cue_pattern = re.compile(
@@ -32,7 +32,7 @@ class CleanupStage:
         raw_vtt_content = ctx.trc.get("pipeline_outputs", {}).get("raw_vtt", "")
         if not raw_vtt_content:
             return StageOutput(
-                trc_outputs={"cleanup": ""},
+                trc_outputs={"vtt_cleanup": ""},
                 input_info="Input: 0 chars",
                 output_info="Output: 0 chars",
             )
@@ -52,7 +52,7 @@ class CleanupStage:
         if not raw_segments:
             logger.info("No dialogue segments parsed from VTT content.")
             return StageOutput(
-                trc_outputs={"cleanup": ""},
+                trc_outputs={"vtt_cleanup": ""},
                 input_info=f"Input: {len(raw_vtt_content)} chars",
                 output_info="Output: 0 chars",
             )
@@ -105,7 +105,7 @@ class CleanupStage:
 
         if not consolidated:
             return StageOutput(
-                trc_outputs={"cleanup": ""},
+                trc_outputs={"vtt_cleanup": ""},
                 input_info=f"Input: {len(raw_vtt_content)} chars",
                 output_info="Output: 0 chars",
             )
@@ -127,7 +127,7 @@ class CleanupStage:
 
         out_text = "\n".join(out_lines)
         return StageOutput(
-            trc_outputs={"cleanup": out_text},
+            trc_outputs={"vtt_cleanup": out_text},
             input_info=f"Input: {len(raw_vtt_content)} chars",
             output_info=f"Output: {len(out_text)} chars",
         )

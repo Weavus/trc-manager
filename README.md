@@ -5,7 +5,7 @@ TRC Manager is a Streamlit application and modular processing pipeline for handl
 ## Key Features
 - Upload multiple `.vtt` transcript files per incident.
 - Automatic incident file management (`data/incidents/INC*.json`).
-- Modular pipeline stages (cleanup, refinement, people_extraction, summarisation, keyword_extraction, master_summary).
+- Modular pipeline stages (vtt_cleanup, refinement, people_extraction, summarisation, keyword_extraction, master_summary).
 - Stage dependency resolution and partial re-runs from any stage.
 - Artifact persistence (text + JSON) under `data/artifacts/`.
 - People directory aggregation with discovered roles & knowledge.

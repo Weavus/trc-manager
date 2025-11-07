@@ -8,10 +8,10 @@ from .base import RunContext, StageOutput
 
 class RefinementStage:
     name = "refinement"
-    requires = ["cleanup"]
+    requires = ["vtt_cleanup"]
 
     def run(self, ctx: RunContext, params: dict[str, Any] | None = None) -> StageOutput:
-        cleaned = ctx.trc.get("pipeline_outputs", {}).get("cleanup", "")
+        cleaned = ctx.trc.get("pipeline_outputs", {}).get("vtt_cleanup", "")
         text = re.sub(r"\s+", " ", cleaned).strip()
         return StageOutput(
             trc_outputs={"refinement": text},

@@ -207,8 +207,8 @@ def page_upload() -> None:
 
             # Helper mapping for stage input/output keys
             input_key_map: dict[str, str] = {
-                "cleanup": "raw_vtt",
-                "refinement": "cleanup",
+                "vtt_cleanup": "raw_vtt",
+                "refinement": "vtt_cleanup",
                 "people_extraction": "refinement",
                 "summarisation": "refinement",
                 "keyword_extraction": "refinement",
@@ -329,7 +329,7 @@ def page_upload() -> None:
                             po = trc_view.get("pipeline_outputs", {})
                             # primary outputs per stage
                             out_key = None
-                            if stage in ("cleanup", "refinement", "summarisation"):
+                            if stage in ("vtt_cleanup", "refinement", "summarisation"):
                                 out_key = stage if stage != "summarisation" else "summarisation"
                             elif stage == "people_extraction":
                                 out_key = "people_extraction"
@@ -518,7 +518,7 @@ def page_library() -> None:
                 "Master Summary",
                 value=orig_ms,
                 key=ms_key,
-                height=250,
+                height=500,
             )
             if ms != orig_ms:
                 c1, c2 = st.columns(2)
@@ -546,7 +546,7 @@ def page_library() -> None:
                 with tab:
                     stage_tabs = st.tabs(
                         [
-                            "cleanup",
+                            "vtt_cleanup",
                             "refinement",
                             "people_extraction",
                             "summarisation",
@@ -557,8 +557,8 @@ def page_library() -> None:
 
                     # Helper mapping for stage inputs
                     input_key_map = {
-                        "cleanup": "raw_vtt",
-                        "refinement": "cleanup",
+                        "vtt_cleanup": "raw_vtt",
+                        "refinement": "vtt_cleanup",
                         "people_extraction": "refinement",
                         "summarisation": "refinement",
                         "keyword_extraction": "refinement",
@@ -567,7 +567,7 @@ def page_library() -> None:
 
                     for _s, tab_stage in enumerate(
                         [
-                            "cleanup",
+                            "vtt_cleanup",
                             "refinement",
                             "people_extraction",
                             "summarisation",
@@ -668,7 +668,7 @@ def page_library() -> None:
                                     po = trc.get("pipeline_outputs", {})
                                     out_key = None
                                     if tab_stage in (
-                                        "cleanup",
+                                        "vtt_cleanup",
                                         "refinement",
                                         "summarisation",
                                     ):
@@ -743,7 +743,7 @@ def page_library() -> None:
                         "Rerun pipeline from:",
                         options=[
                             "Start",
-                            "cleanup",
+                            "vtt_cleanup",
                             "refinement",
                             "people_extraction",
                             "summarisation",
@@ -922,7 +922,7 @@ def page_config() -> None:
     else:
         cfg = {
             "pipeline_order": [
-                "cleanup",
+                "vtt_cleanup",
                 "refinement",
                 "people_extraction",
                 "summarisation",
@@ -932,7 +932,7 @@ def page_config() -> None:
             "stages": {
                 s: {"enabled": True, "params": {}}
                 for s in [
-                    "cleanup",
+                    "vtt_cleanup",
                     "refinement",
                     "people_extraction",
                     "summarisation",
