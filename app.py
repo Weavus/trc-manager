@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import contextlib
 import json
+import shutil
+import time
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -11,6 +13,7 @@ from st_diff_viewer import diff_viewer
 from streamlit_sortables import sort_items
 
 from trc.pipeline import (
+    ARTIFACTS_DIR,
     CONFIG_PATH,
     DATA_DIR,
     INCIDENTS_DIR,
@@ -561,18 +564,32 @@ def page_library() -> None:
     col1, col2, col3 = st.columns([2, 2, 4])
     with col1:
         view_mode = st.selectbox(
-            "View Mode", ["Cards", "List", "Timeline"], help="Choose how to display incidents"
+            "View Mode",
+            ["Cards", "List", "Timeline"],
+            index=["Cards", "List", "Timeline"].index(
+                st.session_state.get("library_view_mode", "Cards")
+            ),
+            help="Choose how to display incidents",
         )
+        st.session_state["library_view_mode"] = view_mode
     with col2:
         sort_by = st.selectbox(
-            "Sort By", ["Newest First", "Oldest First"], help="Sort incidents by date"
+            "Sort By",
+            ["Newest First", "Oldest First"],
+            index=["Newest First", "Oldest First"].index(
+                st.session_state.get("library_sort_by", "Newest First")
+            ),
+            help="Sort incidents by date",
         )
+        st.session_state["library_sort_by"] = sort_by
     with col3:
         search_term = st.text_input(
             "Search",
+            value=st.session_state.get("library_search_term", ""),
             placeholder="Search incidents, titles, or content...",
             help="Full-text search across all incident data",
         )
+        st.session_state["library_search_term"] = search_term
 
     # Update session state with current filter values
     st.session_state["filters"]["people"] = people_filter
@@ -774,26 +791,31 @@ def display_incident_card(incident_id, incident_data):
         "#28a745" if is_complete and not has_errors else "#ffc107" if has_errors else "#17a2b8"
     )
 
-    # Card layout
+    # Clickable card layout
+    if st.button(
+        f"📋 {incident_id} - {title}",
+        key=f"card_{incident_id}",
+        help=f"Click to view details for incident {incident_id}",
+        use_container_width=True,
+    ):
+        st.session_state["selected_incident_id"] = incident_id
+        st.session_state["page"] = "TRC Details"
+        st.rerun()
+
+    # Card content (displayed below the button)
     st.markdown(
         f"""
     <div style="
         border: 1px solid #e9ecef;
         border-radius: 10px;
-        padding: 1.5rem;
-        margin: 0.5rem 0;
-        background-color: white;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        transition: box-shadow 0.3s ease;
+        padding: 1rem;
+        margin: 0.5rem 0 1rem 0;
+        background-color: #f8f9fa;
+        border-left: 4px solid {status_color};
     ">
-        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem;">
-            <div>
-                <h4 style="margin: 0; color: #495057;">{incident_id}</h4>
-                <p style="margin: 0.5rem 0; color: #6c757d; font-size: 0.9rem;">{title}</p>
-            </div>
-            <div style="text-align: right;">
-                <div style="font-size: 1.5rem;">{status_icon}</div>
-                <div style="font-size: 0.8rem; color: {status_color};">{trc_count} TRC{trc_count != 1 and "s" or ""}</div>
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div style="font-size: 0.9rem; color: #6c757d;">
+                {trc_count} TRC{trc_count != 1 and "s" or ""} • {status_icon}
             </div>
         </div>
     """,
@@ -809,31 +831,7 @@ def display_incident_card(incident_id, incident_data):
     else:
         st.caption("📝 No summary available")
 
-    # Action buttons
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        if st.button("👁️ View Details", key=f"view_{incident_id}", use_container_width=True):
-            st.session_state[f"expand_{incident_id}"] = not st.session_state.get(
-                f"expand_{incident_id}", False
-            )
-    with col2:
-        if st.button("✏️ Edit", key=f"edit_{incident_id}", use_container_width=True):
-            st.session_state[f"edit_mode_{incident_id}"] = not st.session_state.get(
-                f"edit_mode_{incident_id}", False
-            )
-    with col3:
-        if st.button("📊 Export", key=f"export_{incident_id}", use_container_width=True):
-            st.info("Export feature coming soon!")
-
     st.markdown("</div>", unsafe_allow_html=True)
-
-    # Expanded details
-    if st.session_state.get(f"expand_{incident_id}", False):
-        display_incident_details(incident_id, incident_data)
-
-    # Edit mode
-    if st.session_state.get(f"edit_mode_{incident_id}", False):
-        display_incident_editor(incident_id, incident_data)
 
 
 def display_incident_details(incident_id, incident_data):
@@ -1985,6 +1983,316 @@ def display_people_as_list(filtered_people, directory):
                     st.success("Knowledge added")
 
 
+def page_trc_details() -> None:
+    """Display detailed information for a specific TRC incident."""
+    # Get incident ID from session state
+    incident_id = st.session_state.get("selected_incident_id")
+    if not incident_id:
+        st.error("No incident selected")
+        if st.button("← Back to Library"):
+            st.session_state["page"] = "TRC Library"
+            st.rerun()
+        return
+
+    # Load incident data
+    incidents = list_incidents()
+    incident = next((inc for inc in incidents if inc.get("incident_id") == incident_id), None)
+
+    if not incident:
+        st.error(f"Incident {incident_id} not found")
+        if st.button("← Back to Library"):
+            st.session_state["page"] = "TRC Library"
+            st.rerun()
+        return
+
+    # Page header with navigation
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        st.markdown(f"# 📋 Incident {incident_id}")
+        title = incident.get("title") or "(no title)"
+        st.markdown(f"*{title}*")
+    with col2:
+        if st.button("← Back to Library", use_container_width=True):
+            st.session_state["page"] = "TRC Library"
+            st.rerun()
+
+    st.markdown("---")
+
+    # Incident Overview
+    trcs = incident.get("trcs", [])
+    master_summary = incident.get("master_summary", "")
+
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("Total TRCs", len(trcs))
+    with col2:
+        complete_trcs = sum(
+            1 for trc in trcs if trc.get("pipeline_outputs", {}).get("summarisation")
+        )
+        st.metric("Completed", f"{complete_trcs}/{len(trcs)}")
+    with col3:
+        has_errors = any(trc.get("pipeline_outputs", {}).get("error") for trc in trcs)
+        status = (
+            "⚠️ Has Errors"
+            if has_errors
+            else "✅ Complete"
+            if complete_trcs == len(trcs)
+            else "⏳ Processing"
+        )
+        st.metric("Status", status)
+
+    # Master Summary
+    if master_summary:
+        st.markdown("### 📝 Master Summary")
+        st.write(master_summary)
+        st.markdown("---")
+
+    # TRC Details
+    st.markdown("### 🎯 TRC Details")
+
+    # Sort TRCs by time
+    trcs_sorted = sorted(trcs, key=lambda t: t.get("start_time", ""))
+
+    for trc in trcs_sorted:
+        trc_id = trc.get("trc_id")
+        start_time = trc.get("start_time", "")
+        pipeline_outputs = trc.get("pipeline_outputs", {})
+
+        # TRC header
+        with st.expander(
+            f"TRC {trc_id} - {start_time[:19] if start_time else 'Unknown time'}", expanded=False
+        ):
+            # TRC metadata
+            col1, col2 = st.columns(2)
+            with col1:
+                st.write(f"**TRC ID:** {trc_id}")
+                st.write(f"**Start Time:** {start_time}")
+            with col2:
+                status = "✅ Complete" if pipeline_outputs.get("summarisation") else "⏳ Processing"
+                if pipeline_outputs.get("error"):
+                    status = "❌ Error"
+                st.write(f"**Status:** {status}")
+
+            # Pipeline outputs
+            if pipeline_outputs:
+                st.markdown("**Pipeline Results:**")
+
+                # Transcription parsing
+                if "transcription_parsing" in pipeline_outputs:
+                    with st.expander("📝 Transcription", expanded=False):
+                        st.text_area(
+                            "Raw transcription",
+                            value=pipeline_outputs["transcription_parsing"],
+                            height=200,
+                            disabled=True,
+                            key=f"transcription_{trc_id}",
+                        )
+
+                # Text enhancement
+                if "text_enhancement" in pipeline_outputs:
+                    with st.expander("✨ Text Enhancement", expanded=False):
+                        st.text_area(
+                            "Enhanced text",
+                            value=pipeline_outputs["text_enhancement"],
+                            height=200,
+                            disabled=True,
+                            key=f"enhancement_{trc_id}",
+                        )
+
+                # Noise reduction
+                if "noise_reduction" in pipeline_outputs:
+                    with st.expander("🔇 Noise Reduction", expanded=False):
+                        st.text_area(
+                            "Cleaned text",
+                            value=pipeline_outputs["noise_reduction"],
+                            height=200,
+                            disabled=True,
+                            key=f"noise_{trc_id}",
+                        )
+
+                # Participant analysis
+                if "participant_analysis" in pipeline_outputs:
+                    with st.expander("👥 Participant Analysis", expanded=False):
+                        participants = pipeline_outputs["participant_analysis"]
+                        if isinstance(participants, dict):
+                            st.json(participants)
+                        else:
+                            st.write(participants)
+
+                # Summarization
+                if "summarisation" in pipeline_outputs:
+                    with st.expander("📋 Summarization", expanded=False):
+                        st.text_area(
+                            "Summary",
+                            value=pipeline_outputs["summarisation"],
+                            height=200,
+                            disabled=True,
+                            key=f"summary_{trc_id}",
+                        )
+
+                # Keywords
+                if "keywords" in pipeline_outputs:
+                    with st.expander("🏷️ Keywords", expanded=False):
+                        keywords = pipeline_outputs["keywords"]
+                        if isinstance(keywords, list):
+                            st.write(", ".join(keywords))
+                        else:
+                            st.write(keywords)
+
+            # Error display
+            if pipeline_outputs.get("error"):
+                st.error(f"Pipeline Error: {pipeline_outputs['error']}")
+
+    # Action buttons
+    st.markdown("---")
+    col1, col2 = st.columns(2)
+    with col1:
+        # Check if delete confirmation is requested
+        if st.session_state.get(f"show_delete_confirm_{incident_id}", False):
+            # Show confirmation dialog
+            st.markdown("---")
+            st.error(
+                "⚠️ **Warning:** This will permanently delete the incident and all associated data!"
+            )
+
+            col_confirm1, col_confirm2 = st.columns(2)
+            with col_confirm1:
+                if st.button(
+                    "❌ Cancel Delete",
+                    key=f"cancel_delete_btn_{incident_id}",
+                    use_container_width=True,
+                ):
+                    st.session_state[f"show_delete_confirm_{incident_id}"] = False
+                    st.rerun()
+            with col_confirm2:
+                if st.button(
+                    "🗑️ Confirm Delete",
+                    key=f"confirm_delete_btn_{incident_id}",
+                    type="primary",
+                    use_container_width=True,
+                ):
+                    try:
+                        # Delete incident JSON file
+                        inc_path = INCIDENTS_DIR / f"{incident_id}.json"
+                        if inc_path.exists():
+                            inc_path.unlink()
+                            st.success(f"✅ Deleted incident file: {incident_id}.json")
+                        else:
+                            st.warning(f"Incident file not found: {incident_id}.json")
+
+                        # Delete associated artifacts directory
+                        artifacts_dir = ARTIFACTS_DIR / incident_id
+                        if artifacts_dir.exists():
+                            shutil.rmtree(artifacts_dir)
+                            st.success(f"✅ Deleted artifacts directory: {incident_id}")
+
+                        # Delete associated uploads directory
+                        uploads_dir = DATA_DIR / "uploads" / incident_id
+                        if uploads_dir.exists():
+                            shutil.rmtree(uploads_dir)
+                            st.success(f"✅ Deleted uploads directory: {incident_id}")
+
+                        st.success("🎉 Incident deleted successfully!")
+
+                        # Clear confirmation state
+                        st.session_state[f"show_delete_confirm_{incident_id}"] = False
+
+                        # Navigate back to library after a short delay
+                        time.sleep(2)
+                        st.session_state["page"] = "TRC Library"
+                        st.rerun()
+
+                    except Exception as e:
+                        st.error(f"❌ Error deleting incident: {str(e)}")
+                        st.session_state[f"show_delete_confirm_{incident_id}"] = False
+        else:
+            # Show initial delete button
+            if st.button(
+                "🗑️ Delete Incident", key=f"delete_btn_{incident_id}", use_container_width=True
+            ):
+                st.session_state[f"show_delete_confirm_{incident_id}"] = True
+                st.rerun()
+    with col2:
+        if st.button("🔄 Re-run Pipeline", use_container_width=True):
+            # Re-run pipeline for all TRCs in this incident
+            st.markdown("---")
+            st.markdown("### 🔄 Re-running Pipeline")
+
+            progress_bar = st.progress(0)
+            status_text = st.empty()
+
+            # Load fresh incident data
+            incidents = list_incidents()
+            current_incident = next(
+                (inc for inc in incidents if inc.get("incident_id") == incident_id), None
+            )
+
+            if not current_incident:
+                st.error("Incident not found")
+                return
+
+            trcs = current_incident.get("trcs", [])
+            successful_reruns = 0
+
+            for i, trc in enumerate(trcs):
+                trc_id = trc.get("trc_id")
+                start_time = trc.get("start_time")
+                original_filepath = trc.get("original_filepath")
+
+                progress = (i + 1) / len(trcs)
+                progress_bar.progress(progress)
+                status_text.text(f"Re-processing TRC {trc_id}...")
+
+                try:
+                    # Read original VTT content
+                    if original_filepath and Path(original_filepath).exists():
+                        with open(original_filepath, "r", encoding="utf-8") as f:
+                            vtt_content = f.read()
+                    else:
+                        # Fallback: use stored raw_vtt if available
+                        pipeline_outputs = trc.get("pipeline_outputs", {})
+                        vtt_content = pipeline_outputs.get("raw_vtt", "")
+                        if not vtt_content:
+                            st.error(f"No original content found for TRC {trc_id}")
+                            continue
+
+                    # Parse start time
+                    if start_time:
+                        try:
+                            # Convert ISO time back to the format expected by process_pipeline
+                            dt = datetime.fromisoformat(start_time.replace("Z", "+00:00"))
+                            start_iso = dt.strftime("%Y-%m-%dT%H:%M:00Z")
+                        except:
+                            start_iso = start_time
+                    else:
+                        st.error(f"No start time found for TRC {trc_id}")
+                        continue
+
+                    # Re-run pipeline
+                    result = process_pipeline(vtt_content, incident_id, start_iso)
+
+                    if result.success:
+                        successful_reruns += 1
+                        st.success(f"✅ Successfully re-processed TRC {trc_id}")
+                        # The pipeline automatically updates the incident file, so no manual update needed
+
+                    else:
+                        st.error(f"❌ Failed to re-process TRC {trc_id}: {result.failed_stage}")
+
+                except Exception as e:
+                    st.error(f"❌ Error re-processing TRC {trc_id}: {str(e)}")
+
+            # Clean up progress indicators
+            progress_bar.empty()
+            status_text.empty()
+
+            if successful_reruns > 0:
+                st.success(f"🎉 Successfully re-processed {successful_reruns}/{len(trcs)} TRCs")
+                st.info("Refresh the page to see updated results")
+            else:
+                st.error("No TRCs were successfully re-processed")
+
+
 def page_config() -> None:
     st.header("Configuration")
 
@@ -2252,6 +2560,8 @@ def main() -> None:
         page_upload()
     elif page == "TRC Library":
         page_library()
+    elif page == "TRC Details":
+        page_trc_details()
     elif page == "People Directory":
         page_people()
     elif page == "Configuration":
