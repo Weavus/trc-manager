@@ -1,0 +1,56 @@
+{
+  "ramesh triplea": {
+    "raw_name": "ramesh triplea",
+    "display_name": "Ramesh Triplea",
+    "role_override": null,
+    "discovered_roles": [
+      {
+        "raw_name": "ramesh triplea",
+        "display_name": "Ramesh Triplea",
+        "role": "Participant",
+        "reasoning": "Heuristic extraction placeholder.",
+        "confidence_score": 5.0,
+        "incident_id": "INC00027452650",
+        "trc_id": "trc_2025-06-05T06:06:00Z"
+      }
+    ],
+    "discovered_knowledge": [
+      {
+        "raw_name": "ramesh triplea",
+        "display_name": "Ramesh Triplea",
+        "knowledge": "General TRC context",
+        "reasoning": "Heuristic extraction placeholder.",
+        "confidence_score": 4.0,
+        "incident_id": "INC00027452650",
+        "trc_id": "trc_2025-06-05T06:06:00Z"
+      }
+    ]
+  },
+  "thanks christmas": {
+    "raw_name": "thanks christmas",
+    "display_name": "Thanks Christmas",
+    "role_override": null,
+    "discovered_roles": [
+      {
+        "raw_name": "thanks christmas",
+        "display_name": "Thanks Christmas",
+        "role": "Participant",
+        "reasoning": "Heuristic extraction placeholder.",
+        "confidence_score": 5.0,
+        "incident_id": "INC00027452650",
+        "trc_id": "trc_2025-06-05T06:06:00Z"
+      }
+    ],
+    "discovered_knowledge": [
+      {
+        "raw_name": "thanks christmas",
+        "display_name": "Thanks Christmas",
+        "knowledge": "General TRC context",
+        "reasoning": "Heuristic extraction placeholder.",
+        "confidence_score": 4.0,
+        "incident_id": "INC00027452650",
+        "trc_id": "trc_2025-06-05T06:06:00Z"
+      }
+    ]
+  }
+}

@@ -1,0 +1,1 @@
+"""TRC Manager core package."""

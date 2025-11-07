@@ -38,13 +38,19 @@ def init_state() -> None:
 def sidebar_nav() -> None:
     with st.sidebar:
         st.title("TRC Manager")
-        st.session_state["page"] = st.radio(
-            "Navigate",
-            options=["TRC Upload", "TRC Library", "People Directory", "Configuration"],
-            index=["TRC Upload", "TRC Library", "People Directory", "Configuration"].index(
-                st.session_state["page"]
-            ),
-        )
+        pages = ["TRC Upload", "TRC Library", "People Directory", "Configuration"]
+        current = st.session_state.get("page", pages[0])
+        for p in pages:
+            is_active = p == current
+            label = ("• " + p) if is_active else p
+            if st.button(
+                label,
+                key=f"nav_{p.replace(' ', '_').lower()}",
+                use_container_width=True,
+                disabled=is_active,
+            ):
+                st.session_state["page"] = p
+                st.rerun()
 
 
 def page_upload() -> None:

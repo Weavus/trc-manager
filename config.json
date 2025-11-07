@@ -1,0 +1,18 @@
+{
+  "pipeline_order": [
+    "cleanup",
+    "refinement",
+    "people_extraction",
+    "summarisation",
+    "keyword_extraction",
+    "master_summary"
+  ],
+  "stages": {
+    "cleanup": {"enabled": true, "params": {}},
+    "refinement": {"enabled": true, "params": {}},
+    "people_extraction": {"enabled": true, "params": {"llm_model": "placeholder"}},
+    "summarisation": {"enabled": true, "params": {"llm_model": "placeholder"}},
+    "keyword_extraction": {"enabled": true, "params": {}},
+    "master_summary": {"enabled": true, "params": {"llm_model": "placeholder"}}
+  }
+}
