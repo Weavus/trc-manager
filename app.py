@@ -86,36 +86,33 @@ def init_state() -> None:
 def sidebar_nav() -> None:
     with st.sidebar:
         # Header section with branding
-        col1, col2 = st.columns([3, 1])
-        with col1:
-            st.markdown("## 🔧 TRC Manager")
-            st.caption("Technical Recovery Call Processor")
-        with col2:
-            # Status indicator
-            total_incidents = len(list_incidents())
-            st.metric("Incidents", total_incidents, delta=None, delta_color="normal")
+        st.markdown("## 🔧 TRC Manager")
+        st.caption("Technical Recovery Call Processor")
 
         st.divider()
+
+        # Get data for navigation badges
+        total_incidents = len(list_incidents())
 
         # Navigation sections
         nav_items = [
             {
-                "name": "TRC Upload",
+                "name": "TRC Transcript Upload",
                 "icon": "📤",
-                "description": "Upload and process new TRC files",
+                "description": "Upload and process transcript files",
                 "badge": None
             },
             {
                 "name": "TRC Library",
                 "icon": "📚",
                 "description": "Browse and manage processed TRCs",
-                "badge": f"{total_incidents} incidents"
+                "badge": f"{total_incidents}"
             },
             {
                 "name": "People Directory",
                 "icon": "👥",
                 "description": "Manage participant information",
-                "badge": f"{len(load_people_directory())} people"
+                "badge": f"{len(load_people_directory())}"
             },
             {
                 "name": "Configuration",
