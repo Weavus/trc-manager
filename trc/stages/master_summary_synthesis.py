@@ -5,12 +5,8 @@ from typing import Any
 from .base import RunContext, StageOutput
 
 
-class MasterSummaryStage:
-    """DEPRECATED: replaced by `MasterSummarySynthesisStage`.
-
-    Prefer `trc.stages.master_summary_synthesis.MasterSummarySynthesisStage`.
-    """
-    name = "master_summary"
+class MasterSummarySynthesisStage:
+    name = "master_summary_synthesis"
     requires: list[str] = []
 
     def run(self, ctx: RunContext, params: dict[str, Any] | None = None) -> StageOutput:

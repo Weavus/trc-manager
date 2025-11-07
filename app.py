@@ -208,12 +208,12 @@ def page_upload() -> None:
 
             # Helper mapping for stage input/output keys
             input_key_map: dict[str, str] = {
-                "vtt_cleanup": "raw_vtt",
-                "refinement": "vtt_cleanup",
-                "people_extraction": "refinement",
-                "summarisation": "refinement",
-                "keyword_extraction": "refinement",
-                "master_summary": "summarisation",
+                "transcription_parsing": "raw_vtt",
+                "text_enhancement": "transcription_parsing",
+                "noise_reduction": "text_enhancement",
+                "participant_analysis": "noise_reduction",
+                "summarisation": "noise_reduction",
+                "keyword_extraction": "noise_reduction",
             }
 
             for log in result.stage_logs:
@@ -246,7 +246,7 @@ def page_upload() -> None:
                             st.markdown("**Inputs**")
                         # Compute input text to copy
                         input_text = ""
-                        if stage == "master_summary":
+                        if stage == "master_summary_synthesis":
                             summaries = [
                                 t.get("pipeline_outputs", {}).get("summarisation", "")
                                 for t in inc_view.get("trcs", [])
@@ -294,7 +294,7 @@ def page_upload() -> None:
                         with hoc1:
                             st.markdown("**Outputs**")
                         out_text = ""
-                        if stage == "master_summary":
+                        if stage == "master_summary_synthesis":
                             ms_text = inc_view.get("master_summary", "")
                             st.text_area(
                                 f"master_summary {_format_chars_and_size(ms_text)}",
@@ -330,10 +330,15 @@ def page_upload() -> None:
                             po = trc_view.get("pipeline_outputs", {})
                             # primary outputs per stage
                             out_key = None
-                            if stage in ("vtt_cleanup", "refinement", "summarisation"):
+                            if stage in (
+                                "transcription_parsing",
+                                "text_enhancement",
+                                "noise_reduction",
+                                "summarisation",
+                            ):
                                 out_key = stage if stage != "summarisation" else "summarisation"
-                            elif stage == "people_extraction":
-                                out_key = "people_extraction"
+                            elif stage == "participant_analysis":
+                                out_key = "participant_analysis"
                             elif stage == "keyword_extraction":
                                 out_key = "keywords"
 
@@ -357,18 +362,22 @@ def page_upload() -> None:
                             artifact_keys: list[str] = []
                             if stage == "summarisation":
                                 artifact_keys = ["summarisation_llm_output"]
-                            elif stage == "people_extraction":
+                            elif stage == "participant_analysis":
                                 artifact_keys = [
-                                    "people_extraction_llm_output",
-                                    "people_extraction_llm_output_raw",
+                                    "participant_analysis_llm_output",
+                                    "participant_analysis_llm_output_raw",
                                 ]
+                            elif stage == "text_enhancement":
+                                artifact_keys = ["text_enhancement_diffs"]
                             for ak in artifact_keys:
                                 path = arts.get(ak)
                                 if not path:
                                     continue
                                 try:
                                     if (
-                                        ak.endswith("_raw") or ak.endswith("_llm_output")
+                                        ak.endswith("_raw")
+                                        or ak.endswith("_llm_output")
+                                        and path.endswith(".txt")
                                     ) and path.endswith(".txt"):
                                         with open(path, encoding="utf-8") as f:
                                             raw = f.read()
@@ -547,33 +556,35 @@ def page_library() -> None:
                 with tab:
                     stage_tabs = st.tabs(
                         [
-                            "vtt_cleanup",
-                            "refinement",
-                            "people_extraction",
+                            "transcription_parsing",
+                            "text_enhancement",
+                            "noise_reduction",
+                            "participant_analysis",
                             "summarisation",
                             "keyword_extraction",
-                            "master_summary",
+                            "master_summary_synthesis",
                         ]
                     )
 
                     # Helper mapping for stage inputs
                     input_key_map = {
-                        "vtt_cleanup": "raw_vtt",
-                        "refinement": "vtt_cleanup",
-                        "people_extraction": "refinement",
-                        "summarisation": "refinement",
-                        "keyword_extraction": "refinement",
-                        "master_summary": "summarisation",
+                        "transcription_parsing": "raw_vtt",
+                        "text_enhancement": "transcription_parsing",
+                        "noise_reduction": "text_enhancement",
+                        "participant_analysis": "noise_reduction",
+                        "summarisation": "noise_reduction",
+                        "keyword_extraction": "noise_reduction",
                     }
 
                     for _s, tab_stage in enumerate(
                         [
-                            "vtt_cleanup",
-                            "refinement",
-                            "people_extraction",
+                            "transcription_parsing",
+                            "text_enhancement",
+                            "noise_reduction",
+                            "participant_analysis",
                             "summarisation",
                             "keyword_extraction",
-                            "master_summary",
+                            "master_summary_synthesis",
                         ]
                     ):
                         with stage_tabs[_s]:
@@ -585,7 +596,7 @@ def page_library() -> None:
                                 with ih1:
                                     st.markdown("**Inputs**")
                                 input_text = ""
-                                if tab_stage == "master_summary":
+                                if tab_stage == "master_summary_synthesis":
                                     summaries = [
                                         t.get("pipeline_outputs", {}).get("summarisation", "")
                                         for t in inc.get("trcs", [])
@@ -633,7 +644,7 @@ def page_library() -> None:
                                 with oh1:
                                     st.markdown("**Outputs**")
                                 out_text = ""
-                                if tab_stage == "master_summary":
+                                if tab_stage == "master_summary_synthesis":
                                     ms_text = inc.get("master_summary", "")
                                     st.text_area(
                                         f"master_summary {_format_chars_and_size(ms_text)}",
@@ -669,8 +680,9 @@ def page_library() -> None:
                                     po = trc.get("pipeline_outputs", {})
                                     out_key = None
                                     if tab_stage in (
-                                        "vtt_cleanup",
-                                        "refinement",
+                                        "transcription_parsing",
+                                        "text_enhancement",
+                                        "noise_reduction",
                                         "summarisation",
                                     ):
                                         out_key = (
@@ -678,8 +690,8 @@ def page_library() -> None:
                                             if tab_stage != "summarisation"
                                             else "summarisation"
                                         )
-                                    elif tab_stage == "people_extraction":
-                                        out_key = "people_extraction"
+                                    elif tab_stage == "participant_analysis":
+                                        out_key = "participant_analysis"
                                     elif tab_stage == "keyword_extraction":
                                         out_key = "keywords"
                                     if out_key and out_key in po:
@@ -700,18 +712,22 @@ def page_library() -> None:
                                     artifact_keys: list[str] = []
                                     if tab_stage == "summarisation":
                                         artifact_keys = ["summarisation_llm_output"]
-                                    elif tab_stage == "people_extraction":
+                                    elif tab_stage == "participant_analysis":
                                         artifact_keys = [
-                                            "people_extraction_llm_output",
-                                            "people_extraction_llm_output_raw",
+                                            "participant_analysis_llm_output",
+                                            "participant_analysis_llm_output_raw",
                                         ]
+                                    elif tab_stage == "text_enhancement":
+                                        artifact_keys = ["text_enhancement_diffs"]
                                     for ak in artifact_keys:
                                         path = arts.get(ak)
                                         if not path:
                                             continue
                                         try:
                                             if (
-                                                ak.endswith("_raw") or ak.endswith("_llm_output")
+                                                ak.endswith("_raw")
+                                                or ak.endswith("_llm_output")
+                                                and path.endswith(".txt")
                                             ) and path.endswith(".txt"):
                                                 with open(path, encoding="utf-8") as f:
                                                     raw = f.read()
@@ -744,9 +760,10 @@ def page_library() -> None:
                         "Rerun pipeline from:",
                         options=[
                             "Start",
-                            "vtt_cleanup",
-                            "refinement",
-                            "people_extraction",
+                            "transcription_parsing",
+                            "text_enhancement",
+                            "noise_reduction",
+                            "participant_analysis",
                             "summarisation",
                             "keyword_extraction",
                         ],
@@ -923,22 +940,24 @@ def page_config() -> None:
     else:
         cfg = {
             "pipeline_order": [
-                "vtt_cleanup",
-                "refinement",
-                "people_extraction",
+                "transcription_parsing",
+                "text_enhancement",
+                "noise_reduction",
+                "participant_analysis",
                 "summarisation",
                 "keyword_extraction",
-                "master_summary",
+                "master_summary_synthesis",
             ],
             "stages": {
                 s: {"enabled": True, "params": {}}
                 for s in [
-                    "vtt_cleanup",
-                    "refinement",
-                    "people_extraction",
+                    "transcription_parsing",
+                    "text_enhancement",
+                    "noise_reduction",
+                    "participant_analysis",
                     "summarisation",
                     "keyword_extraction",
-                    "master_summary",
+                    "master_summary_synthesis",
                 ]
             },
         }

@@ -1,15 +1,16 @@
 {
   "pipeline_order": [
-    "vtt_cleanup",
-    "refinement",
-    "people_extraction",
+    "transcription_parsing",
+    "text_enhancement",
+    "noise_reduction",
+    "participant_analysis",
     "summarisation",
     "keyword_extraction",
-    "master_summary"
+    "master_summary_synthesis"
   ],
   "stages": {
-    "vtt_cleanup": {"enabled": true, "params": {}},
-    "refinement": {
+    "transcription_parsing": { "enabled": true, "params": { "replacement_rules": {}, "strip_patterns": [] } },
+    "text_enhancement": {
       "enabled": true,
       "params": {
         "replacement_rules": {
@@ -137,20 +138,14 @@
             "nutacan": "Natthakorn",
             "luther corn": "Natthakorn",
             "not a corn": "Natthakorn"
-          },
-          "filler_words_to_standardize_or_remove": {
-            "uh": "",
-            "Hmm": "",
-            "Mm hmm": "",
-            "Umm": "",
-            "Mm": ""
           }
         }
       }
     },
-    "people_extraction": {"enabled": true, "params": {"llm_model": "placeholder"}},
-    "summarisation": {"enabled": true, "params": {"llm_model": "placeholder"}},
-    "keyword_extraction": {"enabled": true, "params": {}},
-    "master_summary": {"enabled": true, "params": {"llm_model": "placeholder"}}
+    "noise_reduction": { "enabled": true, "params": { "extra_fillers": [] } },
+    "participant_analysis": { "enabled": true, "params": {} },
+    "summarisation": { "enabled": true, "params": { "llm_model": "placeholder" } },
+    "keyword_extraction": { "enabled": true, "params": {} },
+    "master_summary_synthesis": { "enabled": true, "params": {} }
   }
 }

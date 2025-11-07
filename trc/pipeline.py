@@ -146,22 +146,24 @@ def load_stage_registry() -> tuple[dict[str, Stage], dict[str, dict[str, Any]]]:
         CONFIG_PATH,
         {
             "pipeline_order": [
-                "vtt_cleanup",
-                "refinement",
-                "people_extraction",
+                "transcription_parsing",
+                "text_enhancement",
+                "noise_reduction",
+                "participant_analysis",
                 "summarisation",
                 "keyword_extraction",
-                "master_summary",
+                "master_summary_synthesis",
             ],
             "stages": {
                 s: {"enabled": True, "params": {}}
                 for s in [
-                    "vtt_cleanup",
-                    "refinement",
-                    "people_extraction",
+                    "transcription_parsing",
+                    "text_enhancement",
+                    "noise_reduction",
+                    "participant_analysis",
                     "summarisation",
                     "keyword_extraction",
-                    "master_summary",
+                    "master_summary_synthesis",
                 ]
             },
         },
@@ -271,22 +273,24 @@ def process_pipeline(
         CONFIG_PATH,
         {
             "pipeline_order": [
-                "vtt_cleanup",
-                "refinement",
-                "people_extraction",
+                "transcription_parsing",
+                "text_enhancement",
+                "noise_reduction",
+                "participant_analysis",
                 "summarisation",
                 "keyword_extraction",
-                "master_summary",
+                "master_summary_synthesis",
             ],
             "stages": {
                 s: {"enabled": True, "params": {}}
                 for s in [
-                    "vtt_cleanup",
-                    "refinement",
-                    "people_extraction",
+                    "transcription_parsing",
+                    "text_enhancement",
+                    "noise_reduction",
+                    "participant_analysis",
                     "summarisation",
                     "keyword_extraction",
-                    "master_summary",
+                    "master_summary_synthesis",
                 ]
             },
         },

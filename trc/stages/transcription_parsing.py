@@ -16,17 +16,10 @@ class VTTDialogueSegment(TypedDict):
     raw_dialogue: str
 
 
-class CleanupStage:
-    """DEPRECATED: replaced by `TranscriptionParsingStage`.
-
-    This legacy stage parsed raw VTT to HH:MM Speaker: dialogue lines.
-    Prefer using `trc.stages.transcription_parsing.TranscriptionParsingStage`.
-    """
-    name = "vtt_cleanup"
+class TranscriptionParsingStage:
+    name = "transcription_parsing"
     requires = ["raw_vtt"]
 
-    # If VTT offsets roll over (e.g., after hours or across midnight),
-    # add this fixed amount when a decrease is detected.
     FOUR_HOURS_TD = timedelta(hours=4)
 
     _vtt_timestamp_cue_pattern = re.compile(
@@ -41,12 +34,11 @@ class CleanupStage:
         raw_vtt_content = ctx.trc.get("pipeline_outputs", {}).get("raw_vtt", "")
         if not raw_vtt_content:
             return StageOutput(
-                trc_outputs={"vtt_cleanup": ""},
+                trc_outputs={"transcription_parsing": ""},
                 input_info="Input: 0 chars",
                 output_info="Output: 0 chars",
             )
 
-        # Optional cleaning controls from params
         replacement_rules = (params or {}).get("replacement_rules", {})
         flat_replacements = self._flatten_replacement_rules(replacement_rules)
         strip_patterns_conf = (params or {}).get("strip_patterns", [])
@@ -61,7 +53,7 @@ class CleanupStage:
         if not raw_segments:
             logger.info("No dialogue segments parsed from VTT content.")
             return StageOutput(
-                trc_outputs={"vtt_cleanup": ""},
+                trc_outputs={"transcription_parsing": ""},
                 input_info=f"Input: {len(raw_vtt_content)} chars",
                 output_info="Output: 0 chars",
             )
@@ -70,7 +62,6 @@ class CleanupStage:
         last_minute_key: int | None = None
         last_speaker: str | None = None
 
-        # For computing real timestamps from meeting start time
         meeting_start_dt = ctx.start_dt
         last_vtt_offset_td: timedelta | None = None
         current_total_rollover_offset = timedelta(0)
@@ -79,7 +70,6 @@ class CleanupStage:
             speaker = self._normalize_speaker_name(seg.get("raw_speaker", "") or "Unknown Speaker")
             dialogue = seg.get("raw_dialogue", "")
 
-            # Apply replacements (case-insensitive, literal match)
             if flat_replacements:
                 for old, new in flat_replacements.items():
                     try:
@@ -88,7 +78,6 @@ class CleanupStage:
                     except re.error:
                         logger.debug("Bad replacement rule skipped: %r -> %r", old, new)
 
-            # Strip lines by patterns
             if strip_patterns:
                 kept_lines = []
                 for ln in dialogue.splitlines():
@@ -100,14 +89,12 @@ class CleanupStage:
             if not dialogue or not any(ch.isalnum() for ch in dialogue):
                 continue
 
-            # Parse the VTT timestamp to an offset timedelta
             current_vtt_offset_td = self._parse_vtt_timestamp_to_timedelta(
                 seg.get("vtt_timestamp_str", "00:00:00.000")
             )
 
             display_dt = None
             if current_vtt_offset_td is None:
-                # Invalid cue time: keep continuity if we already have a timestamp
                 logger.warning(
                     "Invalid VTT timestamp %r, using previous/meeting start time.",
                     seg.get("vtt_timestamp_str"),
@@ -116,10 +103,8 @@ class CleanupStage:
                     display_dt = consolidated[-1]["display_dt"]
                 else:
                     display_dt = meeting_start_dt
-                # Use zero for grouping fallback
                 current_vtt_offset_td = timedelta(0)
             else:
-                # Detect rollover (VTT offset decreased), add a fixed adjustment window
                 if last_vtt_offset_td is not None and current_vtt_offset_td < last_vtt_offset_td:
                     current_total_rollover_offset += self.FOUR_HOURS_TD
                     logger.debug(
@@ -128,26 +113,21 @@ class CleanupStage:
                         current_vtt_offset_td,
                         current_total_rollover_offset,
                     )
-                # Compute real display dt if meeting start is known
                 if meeting_start_dt is not None:
                     actual_offset = current_vtt_offset_td + current_total_rollover_offset
                     display_dt = meeting_start_dt + actual_offset
                 last_vtt_offset_td = current_vtt_offset_td
 
-            # Determine grouping minute key and HH:MM label
             if display_dt is not None:
-                # Group by absolute minute; use epoch minutes as key
                 minute_key = int(display_dt.timestamp() // 60)
                 hhmm = display_dt.strftime("%H:%M")
             else:
-                # Fallback to offset-based grouping/label
                 total_seconds = int(current_vtt_offset_td.total_seconds())
                 minute_key = total_seconds // 60
                 hh = total_seconds // 3600
                 mm = (total_seconds % 3600) // 60
                 hhmm = f"{hh:02d}:{mm:02d}"
 
-            # Consolidate consecutive lines for same speaker within same minute
             if consolidated and last_speaker == speaker and last_minute_key == minute_key:
                 consolidated[-1]["text"] += " " + dialogue
             else:
@@ -164,12 +144,11 @@ class CleanupStage:
 
         if not consolidated:
             return StageOutput(
-                trc_outputs={"vtt_cleanup": ""},
+                trc_outputs={"transcription_parsing": ""},
                 input_info=f"Input: {len(raw_vtt_content)} chars",
                 output_info="Output: 0 chars",
             )
 
-        # Build output lines (always prefix with HH:MM)
         out_lines: list[str] = []
         for entry in consolidated:
             lines = entry["text"].splitlines()
@@ -186,14 +165,12 @@ class CleanupStage:
 
         out_text = "\n".join(out_lines)
         return StageOutput(
-            trc_outputs={"vtt_cleanup": out_text},
+            trc_outputs={"transcription_parsing": out_text},
             input_info=f"Input: {len(raw_vtt_content)} chars",
             output_info=f"Output: {len(out_text)} chars",
         )
 
-    # Helpers
     def _clean_vtt_content_newlines_in_voice_tags(self, vtt_content: str) -> str:
-        """Removes newlines within <v> tags to prevent parsing issues."""
         return re.sub(
             r"(<v[^>]*>)(.*?)(</v>)",
             lambda m: m.group(1) + m.group(2).replace("\n", " ").replace("\r", "") + m.group(3),
@@ -202,7 +179,6 @@ class CleanupStage:
         )
 
     def _parse_vtt_timestamp_to_timedelta(self, ts_str: str) -> timedelta | None:
-        """Converts VTT timestamp string (HH:MM:SS.mmm) to timedelta."""
         try:
             h, m, s_ms = ts_str.split(":")
             s, ms = s_ms.split(".")
@@ -215,17 +191,14 @@ class CleanupStage:
         name = (name or "").strip()
         if not name:
             return "Unknown Speaker"
-        # Basic cleanup: collapse whitespace and title-case
         name = re.sub(r"\s+", " ", name)
         return name.strip()
 
     def _extract_vtt_cue_info(self, line: str) -> tuple[str, str] | None:
-        """Extracts start and end timestamp strings from a VTT cue line."""
         match = self._vtt_timestamp_cue_pattern.match(line)
         return (match.group(1), match.group(2)) if match else None
 
     def _parse_vtt_to_raw_segments(self, vtt_content: str) -> list[VTTDialogueSegment]:
-        """Parses raw VTT content into a list of dialogue segments with speaker and timestamp."""
         segments: list[VTTDialogueSegment] = []
         cleaned = self._clean_vtt_content_newlines_in_voice_tags(vtt_content)
         lines = cleaned.splitlines()
@@ -241,7 +214,6 @@ class CleanupStage:
 
             cue_info = self._extract_vtt_cue_info(line)
             if cue_info:
-                # flush previous
                 if active_speaker and active_dialogue_parts:
                     segments.append(
                         {

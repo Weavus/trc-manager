@@ -8,11 +8,11 @@ from .base import RunContext, StageOutput
 
 class KeywordExtractionStage:
     name = "keyword_extraction"
-    requires = ["refinement"]
+    requires = ["noise_reduction"]
 
     def run(self, ctx: RunContext, params: dict[str, Any] | None = None) -> StageOutput:
-        refined = ctx.trc.get("pipeline_outputs", {}).get("refinement", "")
-        words = re.findall(r"[a-zA-Z]{6,}", refined.lower())
+        text = ctx.trc.get("pipeline_outputs", {}).get("noise_reduction", "")
+        words = re.findall(r"[a-zA-Z]{6,}", text.lower())
         freq: dict[str, int] = {}
         for w in words:
             freq[w] = freq.get(w, 0) + 1
@@ -21,6 +21,6 @@ class KeywordExtractionStage:
         return StageOutput(
             trc_outputs={"keywords": keywords},
             incident_updates={"keywords": keywords},
-            input_info=f"Input: {len(refined)} chars",
+            input_info=f"Input: {len(text)} chars",
             output_info=f"Keywords: {len(keywords)}",
         )

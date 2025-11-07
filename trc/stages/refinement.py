@@ -7,6 +7,11 @@ from .base import RunContext, StageOutput
 
 
 class RefinementStage:
+    """DEPRECATED: replaced by `TextEnhancementStage`.
+
+    This legacy stage applied replacement rules to cleaned lines.
+    Prefer `trc.stages.text_enhancement.TextEnhancementStage`.
+    """
     name = "refinement"
     requires = ["vtt_cleanup"]
 
