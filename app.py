@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from datetime import datetime
 from typing import Any
+from pathlib import Path
 
 import streamlit as st
 
@@ -544,52 +545,198 @@ def page_library() -> None:
             tabs = st.tabs(tab_labels)
             for _idx, (tab, trc) in enumerate(zip(tabs, trcs, strict=False)):
                 with tab:
-                    subtabs = st.tabs(
-                        ["Summary", "Refined Text", "People", "Raw Text", "Original VTT"]
-                    )
-                    with subtabs[0]:
-                        summary_val = trc.get("pipeline_outputs", {}).get("summarisation", "")
-                        sum_key = f"sum_{trc['trc_id']}"
-                        new_sum = st.text_area(
-                            "TRC Summary", value=summary_val, key=sum_key, height=300
-                        )
-                        if new_sum != summary_val:
-                            c1, c2 = st.columns(2)
-                            with c1:
-                                if st.button("Save Summary", key=f"save_sum_{trc['trc_id']}"):
-                                    trc["pipeline_outputs"]["summarisation"] = new_sum
-                                    (INCIDENTS_DIR / f"{inc['incident_id']}.json").write_text(
-                                        json.dumps(inc, indent=2)
+                    stage_tabs = st.tabs([
+                        "cleanup",
+                        "refinement",
+                        "people_extraction",
+                        "summarisation",
+                        "keyword_extraction",
+                        "master_summary",
+                    ])
+
+                    # Helper mapping for stage inputs
+                    input_key_map = {
+                        "cleanup": "raw_vtt",
+                        "refinement": "cleanup",
+                        "people_extraction": "refinement",
+                        "summarisation": "refinement",
+                        "keyword_extraction": "refinement",
+                        "master_summary": "summarisation",
+                    }
+
+                    for _s, tab_stage in enumerate([
+                        "cleanup",
+                        "refinement",
+                        "people_extraction",
+                        "summarisation",
+                        "keyword_extraction",
+                        "master_summary",
+                    ]):
+                        with stage_tabs[_s]:
+                            in_col, out_col = st.columns(2)
+
+                            # Inputs
+                            with in_col:
+                                ih1, ih2 = st.columns([0.9, 0.1])
+                                with ih1:
+                                    st.markdown("**Inputs**")
+                                input_text = ""
+                                if tab_stage == "master_summary":
+                                    summaries = [
+                                        t.get("pipeline_outputs", {}).get("summarisation", "")
+                                        for t in inc.get("trcs", [])
+                                    ]
+                                    agg = "\n\n".join([s for s in summaries if s])
+                                    input_text = agg
+                                    label_ms_in = (
+                                        "summarisation (all TRCs) "
+                                        f"{_format_chars_and_size(agg)}"
                                     )
-                                    st.success("Summary saved")
-                            with c2:
-                                if st.button("Revert", key=f"revert_sum_{trc['trc_id']}"):
-                                    st.session_state[sum_key] = summary_val
-                                    st.info("Reverted")
-                                    st.rerun()
-                    with subtabs[1]:
-                        st.text_area(
-                            "Refined",
-                            value=trc.get("pipeline_outputs", {}).get("refinement", ""),
-                            disabled=True,
-                            key=f"refined_{trc['trc_id']}",
-                        )
-                    with subtabs[2]:
-                        st.json(trc.get("pipeline_outputs", {}).get("people_extraction", {}))
-                    with subtabs[3]:
-                        st.text_area(
-                            "Raw Text",
-                            value=trc.get("pipeline_outputs", {}).get("cleanup", ""),
-                            disabled=True,
-                            key=f"raw_{trc['trc_id']}",
-                        )
-                    with subtabs[4]:
-                        st.text_area(
-                            "Original VTT",
-                            value=trc.get("pipeline_outputs", {}).get("raw_vtt", ""),
-                            disabled=True,
-                            key=f"vtt_{trc['trc_id']}",
-                        )
+                                    st.text_area(
+                                        label_ms_in,
+                                        value=agg,
+                                        height=400,
+                                        disabled=True,
+                                        key=f"lib_in_ms_agg_{inc['incident_id']}_{trc['trc_id']}",
+                                    )
+                                else:
+                                    key = input_key_map.get(tab_stage)
+                                    if key:
+                                        val = trc.get("pipeline_outputs", {}).get(key, "")
+                                        if isinstance(val, (dict, list)):
+                                            input_text = json.dumps(val, indent=2)
+                                            st.json(val)
+                                        else:
+                                            input_text = val or ""
+                                            label = f"{key} {_format_chars_and_size(val or '')}"
+                                            st.text_area(
+                                                label,
+                                                value=val or "",
+                                                height=400,
+                                                disabled=True,
+                                                key=f"lib_in_{tab_stage}_{key}_{trc['trc_id']}",
+                                            )
+                                with ih2:
+                                    if st.button(
+                                        "📋",
+                                        key=f"lib_copy_in_{trc['trc_id']}_{tab_stage}",
+                                        help="Copy inputs to clipboard",
+                                    ):
+                                        _copy_script(input_text or "")
+
+                            # Outputs
+                            with out_col:
+                                oh1, oh2 = st.columns([0.9, 0.1])
+                                with oh1:
+                                    st.markdown("**Outputs**")
+                                out_text = ""
+                                if tab_stage == "master_summary":
+                                    ms_text = inc.get("master_summary", "")
+                                    st.text_area(
+                                        f"master_summary {_format_chars_and_size(ms_text)}",
+                                        value=ms_text,
+                                        height=400,
+                                        disabled=True,
+                                        key=f"lib_out_ms_{inc['incident_id']}_{trc['trc_id']}",
+                                    )
+                                    out_text += (ms_text or "")
+                                    inc_art = inc.get("pipeline_artifacts", {}) or {}
+                                    ms_art = inc_art.get("master_summary_raw_llm_output")
+                                    if ms_art:
+                                        try:
+                                            with open(ms_art, encoding="utf-8") as f:
+                                                raw = f.read()
+                                            label_ms_raw = (
+                                                "master_summary_raw_llm_output "
+                                                f"{_format_chars_and_size(raw)}"
+                                            )
+                                            st.text_area(
+                                                label_ms_raw,
+                                                value=raw,
+                                                height=400,
+                                                disabled=True,
+                                                key=f"lib_ms_raw_{inc['incident_id']}_{trc['trc_id']}",
+                                            )
+                                            out_text += ("\n\n" + (raw or ""))
+                                        except Exception:
+                                            st.caption(
+                                                "master_summary_raw_llm_output: (unavailable)"
+                                            )
+                                else:
+                                    po = trc.get("pipeline_outputs", {})
+                                    out_key = None
+                                    if tab_stage in (
+                                        "cleanup",
+                                        "refinement",
+                                        "summarisation",
+                                    ):
+                                        out_key = (
+                                            tab_stage
+                                            if tab_stage != "summarisation"
+                                            else "summarisation"
+                                        )
+                                    elif tab_stage == "people_extraction":
+                                        out_key = "people_extraction"
+                                    elif tab_stage == "keyword_extraction":
+                                        out_key = "keywords"
+                                    if out_key and out_key in po:
+                                        val = po[out_key]
+                                        if isinstance(val, (dict, list)):
+                                            st.json(val)
+                                            out_text += json.dumps(val, indent=2)
+                                        else:
+                                            st.text_area(
+                                                f"{out_key} {_format_chars_and_size(val or '')}",
+                                                value=val or "",
+                                                height=400,
+                                                disabled=True,
+                                                key=f"lib_out_{out_key}_{trc['trc_id']}",
+                                            )
+                                            out_text += (val or "")
+                                    arts = trc.get("pipeline_artifacts", {}) or {}
+                                    artifact_keys: list[str] = []
+                                    if tab_stage == "summarisation":
+                                        artifact_keys = ["summarisation_llm_output"]
+                                    elif tab_stage == "people_extraction":
+                                        artifact_keys = [
+                                            "people_extraction_llm_output",
+                                            "people_extraction_llm_output_raw",
+                                        ]
+                                    for ak in artifact_keys:
+                                        path = arts.get(ak)
+                                        if not path:
+                                            continue
+                                        try:
+                                            if (
+                                                ak.endswith("_raw")
+                                                or ak.endswith("_llm_output")
+                                            ) and path.endswith(".txt"):
+                                                with open(path, encoding="utf-8") as f:
+                                                    raw = f.read()
+                                                st.text_area(
+                                                    f"{ak} {_format_chars_and_size(raw)}",
+                                                    value=raw,
+                                                    height=400,
+                                                    disabled=True,
+                                                    key=f"lib_art_{ak}_{trc['trc_id']}",
+                                                )
+                                                out_text += ("\n\n" + (raw or ""))
+                                            elif path.endswith(".json"):
+                                                with open(path, encoding="utf-8") as f:
+                                                    data = json.loads(f.read())
+                                                st.json(data)
+                                                out_text += (
+                                                    "\n\n" + json.dumps(data, indent=2)
+                                                )
+                                        except Exception:
+                                            st.caption(f"{ak}: (unavailable)")
+                                with oh2:
+                                    if st.button(
+                                        "📋",
+                                        key=f"lib_copy_out_{trc['trc_id']}_{tab_stage}",
+                                        help="Copy outputs to clipboard",
+                                    ):
+                                        _copy_script(out_text or "")
 
                     # Rerun controls
                     st.divider()
@@ -814,11 +961,132 @@ def page_config() -> None:
             st.warning(f"Invalid JSON for {s} params; keeping previous")
 
     st.subheader("Maintenance")
-    if st.button("Clear People Directory") and st.checkbox(
-        "Are you sure? This will delete all discovered people, roles, and knowledge."
+    # People maintenance
+    st.markdown("**People Directory**")
+    if st.button("Delete ALL People") and st.checkbox(
+        "Confirm delete ALL people (roles & knowledge will be lost).",
+        key="confirm_del_all_people",
     ):
         PEOPLE_PATH.write_text("{}\n")
         st.success("People directory cleared")
+    people_dir = load_people_directory()
+    people_names = sorted(list(people_dir.keys()))
+    if people_names:
+        del_person = st.selectbox(
+            "Delete Individual Person",
+            options=["(select)"] + people_names,
+            key="delete_person_select",
+        )
+        if del_person != "(select)" and st.button("Delete Person") and st.checkbox(
+            f"Confirm delete person '{del_person}'", key=f"confirm_del_person_{del_person}"
+        ):
+            people_dir.pop(del_person, None)
+            save_people_directory(people_dir)
+            st.success(f"Deleted person: {del_person}")
+            st.rerun()
+
+    st.markdown("---")
+    # TRC / Incident maintenance
+    st.markdown("**TRC / Incident Library**")
+    incidents = list_incidents()
+    incident_ids = [i.get("incident_id") for i in incidents]
+
+    if st.button("Delete ALL Incidents & TRCs") and st.checkbox(
+        "Confirm delete ALL incidents, TRCs, artifacts & uploads.",
+        key="confirm_del_all_incidents",
+    ):
+        # Remove incident JSONs
+        for f in INCIDENTS_DIR.glob("*.json"):
+            try:
+                f.unlink()
+            except Exception:
+                pass
+        # Remove artifacts + uploads directories
+        artifacts_root = DATA_DIR / "artifacts"
+        uploads_root = DATA_DIR / "uploads"
+        for root in [artifacts_root, uploads_root]:
+            if root.exists():
+                for p in root.glob("*"):
+                    try:
+                        if p.is_dir():
+                            import shutil
+                            shutil.rmtree(p, ignore_errors=True)
+                        else:
+                            p.unlink(missing_ok=True)  # type: ignore[arg-type]
+                    except Exception:
+                        pass
+        st.success("All incidents/TRCs removed")
+        st.rerun()
+
+    if incident_ids:
+        sel_inc = st.selectbox(
+            "Select Incident",
+            options=["(select)"] + incident_ids,
+            key="maintenance_select_incident",
+        )
+        if sel_inc != "(select)":
+            # Load selected incident
+            inc_path = INCIDENTS_DIR / f"{sel_inc}.json"
+            inc_doc = json.loads(inc_path.read_text()) if inc_path.exists() else {}
+            trcs = inc_doc.get("trcs", [])
+            trc_labels = [t.get("trc_id") for t in trcs]
+            sel_trc = st.selectbox(
+                "Select TRC to Delete (optional)",
+                options=["(none)"] + trc_labels,
+                key=f"maintenance_select_trc_{sel_inc}",
+            )
+            c1, c2 = st.columns(2)
+            with c1:
+                if st.button("Delete Selected TRC") and sel_trc != "(none)" and st.checkbox(
+                    f"Confirm delete TRC '{sel_trc}'", key=f"confirm_del_trc_{sel_trc}"
+                ):
+                    # Remove TRC entry
+                    new_trcs = [t for t in trcs if t.get("trc_id") != sel_trc]
+                    inc_doc["trcs"] = new_trcs
+                    inc_path.write_text(json.dumps(inc_doc, indent=2))
+                    # Remove artifacts dir for that TRC
+                    art_dir = DATA_DIR / "artifacts" / sel_inc / sel_trc
+                    if art_dir.exists():
+                        import shutil
+                        shutil.rmtree(art_dir, ignore_errors=True)
+                    # Remove original upload file if present
+                    for t in trcs:
+                        if t.get("trc_id") == sel_trc:
+                            orig_fp = t.get("original_filepath")
+                            if orig_fp:
+                                try:
+                                    Path(orig_fp).unlink(missing_ok=True)  # type: ignore[arg-type]
+                                except Exception:
+                                    pass
+                            break
+                    st.success(f"Deleted TRC: {sel_trc}")
+                    st.rerun()
+            with c2:
+                if st.button("Delete Entire Incident") and st.checkbox(
+                    f"Confirm delete incident '{sel_inc}' and ALL its TRCs",
+                    key=f"confirm_del_inc_{sel_inc}",
+                ):
+                    # Delete incident file
+                    try:
+                        inc_path.unlink()
+                    except Exception:
+                        pass
+                    # Delete incident-level artifacts dir
+                    inc_art_dir = DATA_DIR / "artifacts" / sel_inc
+                    if inc_art_dir.exists():
+                        import shutil
+                        shutil.rmtree(inc_art_dir, ignore_errors=True)
+                    # Delete uploads dir
+                    inc_uploads_dir = DATA_DIR / "uploads" / sel_inc
+                    if inc_uploads_dir.exists():
+                        import shutil
+                        shutil.rmtree(inc_uploads_dir, ignore_errors=True)
+                    st.success(f"Deleted incident: {sel_inc}")
+                    st.rerun()
+
+    if st.button("Save Configuration"):
+        CONFIG_PATH.write_text(json.dumps(cfg, indent=2))
+        st.success("Configuration saved")
 
     if st.button("Save Configuration"):
         CONFIG_PATH.write_text(json.dumps(cfg, indent=2))
