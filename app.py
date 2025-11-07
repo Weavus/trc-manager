@@ -717,7 +717,7 @@ def page_library() -> None:
                 for _idx, (trc_tab, trc) in enumerate(zip(trc_tabs, trcs_sorted, strict=False)):
                     with trc_tab:
                         # TRC details
-                        st.subheader("TRC Details")
+                        st.subheader("Pipeline Details")
                         stage_tabs = st.tabs(
                             [
                                 "transcription_parsing",
@@ -898,10 +898,9 @@ def page_library() -> None:
                                     total_reps = text_enhancement_diffs_data.get(
                                         "total_replacements", 0
                                     )
-                                    st.markdown(f"**Total replacements: {total_reps}**")
                                     changes = text_enhancement_diffs_data.get("changes", [])
                                     if changes:
-                                        st.markdown("**Text Enhancement Differences:**")
+                                        st.markdown(f"**{total_reps} Replacements:**")
                                         for i, change in enumerate(changes):
                                             hhmm = change.get("hhmm", "N/A")
                                             speaker = change.get("speaker", "N/A")
@@ -910,7 +909,7 @@ def page_library() -> None:
                                                 old_text = change.get("old_dialogue", "")
                                                 new_text = change.get("new_dialogue", "")
                                                 diff_viewer(old_text=old_text, new_text=new_text)
-                                    else:
+                                    elif not changes:
                                         st.caption("No changes recorded")
 
                         # Rerun controls
