@@ -185,17 +185,9 @@ def sidebar_nav() -> None:
 
 
 def page_upload() -> None:
-    # Page header with improved styling and metrics
-    col1, col2 = st.columns([3, 1])
-    with col1:
-        st.markdown("# 📤 Transcript Upload")
-        st.markdown("*Upload and process Technical Recovery Call transcripts*")
-    with col2:
-        # Quick stats
-        total_incidents = len(list_incidents())
-        total_processed = len(st.session_state.get("processed_files", set()))
-        st.metric("Total Incidents", total_incidents)
-        st.metric("Files Processed", total_processed)
+    # Page header with improved styling
+    st.markdown("# 📤 Transcript Upload")
+    st.markdown("*Upload and process Technical Recovery Call transcripts*")
 
     # Initialize session state for tracking processed files
     if "processed_files" not in st.session_state:
@@ -209,11 +201,6 @@ def page_upload() -> None:
     if st.session_state.get("reset_uploader_after_processing", False):
         st.session_state.uploader_reset_counter += 1
         st.session_state.reset_uploader_after_processing = False
-
-    st.markdown("---")
-
-    # Upload section with improved design
-    st.markdown("### 📁 File Upload")
 
     # Instructions and requirements
     with st.expander("📋 Upload Requirements & Instructions", expanded=False):
@@ -1570,19 +1557,12 @@ def display_incidents_as_timeline(sorted_dates, incidents_by_date):
 
 
 def page_people() -> None:
-    # Page header with improved styling and metrics
-    col1, col2 = st.columns([3, 1])
-    with col1:
-        st.markdown("# 👥 People Directory")
-        st.markdown("*Manage participant information and expertise*")
-    with col2:
-        directory = load_people_directory()
-        total_people = len(directory)
-        total_roles = sum(len(p.get("discovered_roles", [])) for p in directory.values())
-        total_skills = sum(len(p.get("discovered_knowledge", [])) for p in directory.values())
-        st.metric("Total People", total_people)
-        st.metric("Total Roles", total_roles)
-        st.metric("Total Skills", total_skills)
+    # Page header with improved styling
+    st.markdown("# 👥 People Directory")
+    st.markdown("*Manage participant information and expertise*")
+
+    # Load directory for later use
+    directory = load_people_directory()
 
     # Prepare filter data
     names = sorted(list(directory.keys()))
@@ -1602,10 +1582,6 @@ def page_people() -> None:
             if isinstance(k.get("knowledge"), str)
         }
     )
-
-    # Main page filters section
-    st.markdown("---")
-    st.markdown("### 🔍 Filters & View Options")
 
     # Filters row
     col1, col2, col3, col4 = st.columns([2, 2, 2, 2])
@@ -1627,6 +1603,8 @@ def page_people() -> None:
         view_mode = st.selectbox(
             "View Mode", ["Cards", "List"], help="Choose how to display people"
         )
+
+    st.markdown("---")
 
     # Apply filters
     def person_matches(p: dict[str, Any]) -> bool:
