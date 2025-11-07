@@ -1,9 +1,12 @@
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from ..llm import create_client_from_config
 from .base import RunContext, StageOutput
+
+logger = logging.getLogger(__name__)
 
 
 class SummarisationStage:
@@ -13,11 +16,14 @@ class SummarisationStage:
     depends_on = []
 
     def run(self, ctx: RunContext, params: dict[str, Any] | None = None) -> StageOutput:
+        logger.info(f"Starting summarisation for incident {ctx.incident_id}, TRC {ctx.trc_id}")
         text = ctx.trc.get("pipeline_outputs", {}).get("noise_reduction", "")
+        logger.debug(f"Input text length: {len(text)} chars")
         cfg = params or {}
         llm_config = cfg.get("llm")
 
         if llm_config:
+            logger.debug("Using LLM for summarization")
             # Use LLM for summarization
             try:
                 llm_client = create_client_from_config(ctx.incident.get("llm", {}))
@@ -37,6 +43,7 @@ class SummarisationStage:
                 if title and not (ctx.incident.get("title") or ""):
                     incident_updates["title"] = title
 
+                logger.info(f"Summarisation completed using LLM: {len(summary)} chars output")
                 return StageOutput(
                     trc_outputs={"summarisation": summary},
                     trc_artifacts_text={"summarisation_llm_output": summary},
@@ -47,9 +54,10 @@ class SummarisationStage:
                 )
             except Exception as e:
                 # Fallback to simple text extraction if LLM fails
-                print(f"LLM summarization failed: {e}, falling back to simple extraction")
+                logger.warning(f"LLM summarization failed: {e}, falling back to simple extraction")
 
         # Fallback: simple text-based summarization
+        logger.debug("Using simple text-based summarization")
         incident_title = ctx.incident.get("title") or None
         title: str | None = None
         if not incident_title:
@@ -59,6 +67,7 @@ class SummarisationStage:
         incident_updates: dict[str, Any] = {}
         if title and not (ctx.incident.get("title") or ""):
             incident_updates["title"] = title
+        logger.info(f"Summarisation completed using simple extraction: {len(summary)} chars output")
         return StageOutput(
             trc_outputs={"summarisation": summary},
             trc_artifacts_text={"summarisation_llm_output": raw},

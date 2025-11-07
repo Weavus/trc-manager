@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import difflib
 import html
+import logging
 import re
 from typing import Any
 
 from .base import RunContext, StageOutput
+
+logger = logging.getLogger(__name__)
 
 
 class TextEnhancementStage:
@@ -15,8 +18,11 @@ class TextEnhancementStage:
     depends_on = []
 
     def run(self, ctx: RunContext, params: dict[str, Any] | None = None) -> StageOutput:
+        logger.info(f"Starting text enhancement for incident {ctx.incident_id}, TRC {ctx.trc_id}")
         parsed = ctx.trc.get("pipeline_outputs", {}).get("transcription_parsing", "")
+        logger.debug(f"Input text length: {len(parsed)} chars")
         if not parsed:
+            logger.warning("No transcription parsing output found, skipping text enhancement")
             return StageOutput(
                 trc_outputs={"text_enhancement": ""},
                 input_info="Input: 0 chars",
@@ -26,6 +32,7 @@ class TextEnhancementStage:
         replacement_rules = (params or {}).get("replacement_rules", {})
         flat_rules = self._flatten_replacement_rules(replacement_rules)
         ordered_rules = sorted(flat_rules.items(), key=lambda kv: len(kv[0]), reverse=True)
+        logger.debug(f"Loaded {len(ordered_rules)} replacement rules")
 
         prefix_pattern = re.compile(r"^(\d{2}:\d{2})\s+([^:]+):\s*(.*)$")
         total_replacements = 0
@@ -76,6 +83,10 @@ class TextEnhancementStage:
                     )
 
         enhanced_text = "\n".join(out_lines).strip()
+        logger.info(
+            f"Text enhancement completed: {len(enhanced_text)} chars output, "
+            f"{total_replacements} replacements applied"
+        )
         messages = []
         if total_replacements:
             messages.append(f"Applied {total_replacements} replacements")

@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 from typing import Any
 
 from ..llm import create_client_from_config
 from .base import RunContext, StageOutput
+
+logger = logging.getLogger(__name__)
 
 
 class ParticipantKnowledgeAnalysisStage:
@@ -15,15 +18,18 @@ class ParticipantKnowledgeAnalysisStage:
     depends_on = ["participant_role_analysis"]
 
     def run(self, ctx: RunContext, params: dict[str, Any] | None = None) -> StageOutput:
+        logger.info(f"Starting participant knowledge analysis for incident {ctx.incident_id}, TRC {ctx.trc_id}")
         text = ctx.trc.get("pipeline_outputs", {}).get("noise_reduction", "")
         # Get roles from the previous stage
         role_analysis = ctx.trc.get("pipeline_outputs", {}).get("participant_role_analysis", {})
         existing_roles = role_analysis.get("roles", [])
+        logger.debug(f"Input text length: {len(text)} chars, existing roles: {len(existing_roles)}")
 
         cfg = params or {}
         llm_config = cfg.get("llm")
 
         if llm_config:
+            logger.debug("Using LLM for participant knowledge analysis")
             # Use LLM for participant knowledge analysis
             try:
                 llm_client = create_client_from_config(ctx.incident.get("llm", {}))
@@ -43,6 +49,7 @@ class ParticipantKnowledgeAnalysisStage:
                 )
 
                 knowledge = payload.get("knowledge", [])
+                logger.debug(f"LLM identified {len(knowledge)} knowledge entries")
 
                 # Build people directory updates for knowledge only
                 updates: dict[str, dict[str, Any]] = {}
@@ -68,6 +75,7 @@ class ParticipantKnowledgeAnalysisStage:
                 # Combine with role analysis for backward compatibility
                 combined_payload = {"roles": existing_roles, "knowledge": knowledge}
 
+                logger.info(f"Participant knowledge analysis completed using LLM: {len(knowledge)} knowledge entries identified")
                 return StageOutput(
                     trc_outputs={
                         "participant_knowledge_analysis": {"knowledge": knowledge},
@@ -90,10 +98,12 @@ class ParticipantKnowledgeAnalysisStage:
                 )
             except Exception as e:
                 # Fallback to heuristic approach if LLM fails
-                print(f"LLM participant knowledge analysis failed: {e}, falling back to heuristic")
+                logger.warning(f"LLM participant knowledge analysis failed: {e}, falling back to heuristic")
 
         # Fallback: heuristic-based participant knowledge analysis
+        logger.debug("Using heuristic-based participant knowledge analysis")
         names = set(re.findall(r"([A-Z][a-z]+\s+[A-Z][a-z]+)", text))
+        logger.debug(f"Heuristic extraction found {len(names)} potential participant names")
         knowledge: list[dict[str, Any]] = []
         updates: dict[str, dict[str, Any]] = {}
         for n in names:
@@ -130,6 +140,7 @@ class ParticipantKnowledgeAnalysisStage:
         # Combine with role analysis for backward compatibility
         combined_payload = {"roles": existing_roles, "knowledge": knowledge}
 
+        logger.info(f"Participant knowledge analysis completed using heuristic: {len(knowledge)} knowledge entries identified")
         return StageOutput(
             trc_outputs={
                 "participant_knowledge_analysis": {"knowledge": knowledge},

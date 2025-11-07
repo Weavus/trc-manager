@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 from typing import Any
 
 from ..llm import create_client_from_config
 from .base import RunContext, StageOutput
+
+logger = logging.getLogger(__name__)
 
 
 class ParticipantRoleAnalysisStage:
@@ -15,11 +18,14 @@ class ParticipantRoleAnalysisStage:
     depends_on = []
 
     def run(self, ctx: RunContext, params: dict[str, Any] | None = None) -> StageOutput:
+        logger.info(f"Starting participant role analysis for incident {ctx.incident_id}, TRC {ctx.trc_id}")
         text = ctx.trc.get("pipeline_outputs", {}).get("noise_reduction", "")
+        logger.debug(f"Input text length: {len(text)} chars")
         cfg = params or {}
         llm_config = cfg.get("llm")
 
         if llm_config:
+            logger.debug("Using LLM for participant role analysis")
             # Use LLM for participant role analysis
             try:
                 llm_client = create_client_from_config(ctx.incident.get("llm", {}))
@@ -31,6 +37,7 @@ class ParticipantRoleAnalysisStage:
                 )
 
                 roles = payload.get("roles", [])
+                logger.debug(f"LLM identified {len(roles)} participant roles")
 
                 # Build people directory updates for roles only
                 updates: dict[str, dict[str, Any]] = {}
@@ -52,6 +59,7 @@ class ParticipantRoleAnalysisStage:
                     updates[raw_name].setdefault("discovered_roles", []).append(entry_copy)
 
                 raw_llm_output = json.dumps({"roles": roles}, indent=2)
+                logger.info(f"Participant role analysis completed using LLM: {len(roles)} roles identified")
                 return StageOutput(
                     trc_outputs={"participant_role_analysis": {"roles": roles}},
                     trc_artifacts_json={"participant_role_analysis_llm_output": {"roles": roles}},
@@ -63,10 +71,12 @@ class ParticipantRoleAnalysisStage:
                 )
             except Exception as e:
                 # Fallback to heuristic approach if LLM fails
-                print(f"LLM participant role analysis failed: {e}, falling back to heuristic")
+                logger.warning(f"LLM participant role analysis failed: {e}, falling back to heuristic")
 
         # Fallback: heuristic-based participant role analysis
+        logger.debug("Using heuristic-based participant role analysis")
         names = set(re.findall(r"([A-Z][a-z]+\s+[A-Z][a-z]+)", text))
+        logger.debug(f"Heuristic extraction found {len(names)} potential participant names")
         roles: list[dict[str, Any]] = []
         updates: dict[str, dict[str, Any]] = {}
         for n in names:
@@ -99,6 +109,7 @@ class ParticipantRoleAnalysisStage:
             updates[entry["raw_name"]].setdefault("discovered_roles", []).append(entry_copy)
 
         raw_llm_output = json.dumps({"roles": roles}, indent=2)
+        logger.info(f"Participant role analysis completed using heuristic: {len(roles)} roles identified")
         return StageOutput(
             trc_outputs={"participant_role_analysis": {"roles": roles}},
             trc_artifacts_json={"participant_role_analysis_llm_output": {"roles": roles}},

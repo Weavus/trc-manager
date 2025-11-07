@@ -33,144 +33,160 @@ class TranscriptionParsingStage:
     )
 
     def run(self, ctx: RunContext, params: dict[str, Any] | None = None) -> StageOutput:
-        raw_vtt_content = ctx.trc.get("pipeline_outputs", {}).get("raw_vtt", "")
-        if not raw_vtt_content:
-            return StageOutput(
-                trc_outputs={"transcription_parsing": ""},
-                input_info="Input: 0 chars",
-                output_info="Output: 0 chars",
-            )
-
-        replacement_rules = (params or {}).get("replacement_rules", {})
-        flat_replacements = self._flatten_replacement_rules(replacement_rules)
-        strip_patterns_conf = (params or {}).get("strip_patterns", [])
-        strip_patterns = []
-        for p in strip_patterns_conf:
-            try:
-                strip_patterns.append(re.compile(str(p), re.IGNORECASE))
-            except re.error:
-                logger.warning("Invalid strip pattern skipped: %r", p)
-
-        raw_segments = self._parse_vtt_to_raw_segments(raw_vtt_content)
-        if not raw_segments:
-            logger.info("No dialogue segments parsed from VTT content.")
-            return StageOutput(
-                trc_outputs={"transcription_parsing": ""},
-                input_info=f"Input: {len(raw_vtt_content)} chars",
-                output_info="Output: 0 chars",
-            )
-
-        consolidated: list[dict[str, Any]] = []
-        last_minute_key: int | None = None
-        last_speaker: str | None = None
-
-        meeting_start_dt = ctx.start_dt
-        last_vtt_offset_td: timedelta | None = None
-        current_total_rollover_offset = timedelta(0)
-
-        for seg in raw_segments:
-            speaker = self.generate_display_name(seg.get("raw_speaker", "") or "Unknown Speaker")
-            dialogue = seg.get("raw_dialogue", "")
-
-            if flat_replacements:
-                for old, new in flat_replacements.items():
-                    try:
-                        pattern = re.compile(re.escape(old), re.IGNORECASE)
-                        dialogue = pattern.sub(new, dialogue)
-                    except re.error:
-                        logger.debug("Bad replacement rule skipped: %r -> %r", old, new)
-
-            if strip_patterns:
-                kept_lines = []
-                for ln in dialogue.splitlines():
-                    if not any(p.search(ln) for p in strip_patterns):
-                        kept_lines.append(ln)
-                dialogue = "\n".join(kept_lines)
-
-            dialogue = dialogue.strip()
-            if not dialogue or not any(ch.isalnum() for ch in dialogue):
-                continue
-
-            current_vtt_offset_td = self._parse_vtt_timestamp_to_timedelta(
-                seg.get("vtt_timestamp_str", "00:00:00.000")
-            )
-
-            display_dt = None
-            if current_vtt_offset_td is None:
-                logger.warning(
-                    "Invalid VTT timestamp %r, using previous/meeting start time.",
-                    seg.get("vtt_timestamp_str"),
-                )
-                if consolidated and consolidated[-1].get("display_dt") is not None:
-                    display_dt = consolidated[-1]["display_dt"]
-                else:
-                    display_dt = meeting_start_dt
-                current_vtt_offset_td = timedelta(0)
-            else:
-                if last_vtt_offset_td is not None and current_vtt_offset_td < last_vtt_offset_td:
-                    current_total_rollover_offset += self.FOUR_HOURS_TD
-                    logger.debug(
-                        "VTT time rollover detected. Prev: %s Curr: %s Total adjustment: %s",
-                        last_vtt_offset_td,
-                        current_vtt_offset_td,
-                        current_total_rollover_offset,
-                    )
-                if meeting_start_dt is not None:
-                    actual_offset = current_vtt_offset_td + current_total_rollover_offset
-                    display_dt = meeting_start_dt + actual_offset
-                last_vtt_offset_td = current_vtt_offset_td
-
-            if display_dt is not None:
-                minute_key = int(display_dt.timestamp() // 60)
-                hhmm = display_dt.strftime("%H:%M")
-            else:
-                total_seconds = int(current_vtt_offset_td.total_seconds())
-                minute_key = total_seconds // 60
-                hh = total_seconds // 3600
-                mm = (total_seconds % 3600) // 60
-                hhmm = f"{hh:02d}:{mm:02d}"
-
-            if consolidated and last_speaker == speaker and last_minute_key == minute_key:
-                consolidated[-1]["text"] += " " + dialogue
-            else:
-                consolidated.append(
-                    {
-                        "hhmm": hhmm,
-                        "speaker": speaker,
-                        "text": dialogue,
-                        "display_dt": display_dt,
-                    }
-                )
-                last_speaker = speaker
-                last_minute_key = minute_key
-
-        if not consolidated:
-            return StageOutput(
-                trc_outputs={"transcription_parsing": ""},
-                input_info=f"Input: {len(raw_vtt_content)} chars",
-                output_info="Output: 0 chars",
-            )
-
-        out_lines: list[str] = []
-        for entry in consolidated:
-            lines = entry["text"].splitlines()
-            first = lines[0].strip() if lines else ""
-            prefix = f"{entry['hhmm']} {entry['speaker']}:"
-            if first:
-                out_lines.append(f"{prefix} {first}")
-            else:
-                out_lines.append(prefix)
-            for extra in lines[1:]:
-                extra = extra.strip()
-                if extra:
-                    out_lines.append(extra)
-
-        out_text = "\n".join(out_lines)
-        return StageOutput(
-            trc_outputs={"transcription_parsing": out_text},
-            input_info=f"Input: {len(raw_vtt_content)} chars",
-            output_info=f"Output: {len(out_text)} chars",
+        logger.info(
+            f"Starting transcription parsing for incident {ctx.incident_id}, TRC {ctx.trc_id}"
         )
+        logger.debug(
+            f"Input VTT content length: {len(ctx.trc.get('pipeline_outputs', {}).get('raw_vtt', ''))}"
+        )
+
+        try:
+            raw_vtt_content = ctx.trc.get("pipeline_outputs", {}).get("raw_vtt", "")
+            if not raw_vtt_content:
+                logger.warning("No VTT content found in pipeline outputs")
+                return StageOutput(
+                    trc_outputs={"transcription_parsing": ""},
+                    input_info="Input: 0 chars",
+                    output_info="Output: 0 chars",
+                )
+
+            replacement_rules = (params or {}).get("replacement_rules", {})
+            flat_replacements = self._flatten_replacement_rules(replacement_rules)
+            strip_patterns_conf = (params or {}).get("strip_patterns", [])
+            strip_patterns = []
+            for p in strip_patterns_conf:
+                try:
+                    strip_patterns.append(re.compile(str(p), re.IGNORECASE))
+                except re.error:
+                    logger.warning("Invalid strip pattern skipped: %r", p)
+
+            raw_segments = self._parse_vtt_to_raw_segments(raw_vtt_content)
+            logger.debug(f"Parsed {len(raw_segments)} raw segments from VTT content")
+            if not raw_segments:
+                logger.warning("No dialogue segments parsed from VTT content.")
+                return StageOutput(
+                    trc_outputs={"transcription_parsing": ""},
+                    input_info=f"Input: {len(raw_vtt_content)} chars",
+                    output_info="Output: 0 chars",
+                )
+
+            consolidated: list[dict[str, Any]] = []
+            last_minute_key: int | None = None
+            last_speaker: str | None = None
+
+            meeting_start_dt = ctx.start_dt
+            last_vtt_offset_td: timedelta | None = None
+            current_total_rollover_offset = timedelta(0)
+
+            for seg in raw_segments:
+                speaker = self.generate_display_name(seg.get("raw_speaker", "") or "Unknown Speaker")
+                dialogue = seg.get("raw_dialogue", "")
+
+                if flat_replacements:
+                    for old, new in flat_replacements.items():
+                        try:
+                            pattern = re.compile(re.escape(old), re.IGNORECASE)
+                            dialogue = pattern.sub(new, dialogue)
+                        except re.error:
+                            logger.debug("Bad replacement rule skipped: %r -> %r", old, new)
+
+                if strip_patterns:
+                    kept_lines = []
+                    for ln in dialogue.splitlines():
+                        if not any(p.search(ln) for p in strip_patterns):
+                            kept_lines.append(ln)
+                    dialogue = "\n".join(kept_lines)
+
+                dialogue = dialogue.strip()
+                if not dialogue or not any(ch.isalnum() for ch in dialogue):
+                    continue
+
+                current_vtt_offset_td = self._parse_vtt_timestamp_to_timedelta(
+                    seg.get("vtt_timestamp_str", "00:00:00.000")
+                )
+
+                display_dt = None
+                if current_vtt_offset_td is None:
+                    logger.warning(
+                        "Invalid VTT timestamp %r, using previous/meeting start time.",
+                        seg.get("vtt_timestamp_str"),
+                    )
+                    if consolidated and consolidated[-1].get("display_dt") is not None:
+                        display_dt = consolidated[-1]["display_dt"]
+                    else:
+                        display_dt = meeting_start_dt
+                    current_vtt_offset_td = timedelta(0)
+                else:
+                    if last_vtt_offset_td is not None and current_vtt_offset_td < last_vtt_offset_td:
+                        current_total_rollover_offset += self.FOUR_HOURS_TD
+                        logger.debug(
+                            "VTT time rollover detected. Prev: %s Curr: %s Total adjustment: %s",
+                            last_vtt_offset_td,
+                            current_vtt_offset_td,
+                            current_total_rollover_offset,
+                        )
+                    if meeting_start_dt is not None:
+                        actual_offset = current_vtt_offset_td + current_total_rollover_offset
+                        display_dt = meeting_start_dt + actual_offset
+                    last_vtt_offset_td = current_vtt_offset_td
+
+                if display_dt is not None:
+                    minute_key = int(display_dt.timestamp() // 60)
+                    hhmm = display_dt.strftime("%H:%M")
+                else:
+                    total_seconds = int(current_vtt_offset_td.total_seconds())
+                    minute_key = total_seconds // 60
+                    hh = total_seconds // 3600
+                    mm = (total_seconds % 3600) // 60
+                    hhmm = f"{hh:02d}:{mm:02d}"
+
+                if consolidated and last_speaker == speaker and last_minute_key == minute_key:
+                    consolidated[-1]["text"] += " " + dialogue
+                else:
+                    consolidated.append(
+                        {
+                            "hhmm": hhmm,
+                            "speaker": speaker,
+                            "text": dialogue,
+                            "display_dt": display_dt,
+                        }
+                    )
+                    last_speaker = speaker
+                    last_minute_key = minute_key
+
+            if not consolidated:
+                return StageOutput(
+                    trc_outputs={"transcription_parsing": ""},
+                    input_info=f"Input: {len(raw_vtt_content)} chars",
+                    output_info="Output: 0 chars",
+                )
+
+            out_lines: list[str] = []
+            for entry in consolidated:
+                lines = entry["text"].splitlines()
+                first = lines[0].strip() if lines else ""
+                prefix = f"{entry['hhmm']} {entry['speaker']}:"
+                if first:
+                    out_lines.append(f"{prefix} {first}")
+                else:
+                    out_lines.append(prefix)
+                for extra in lines[1:]:
+                    extra = extra.strip()
+                    if extra:
+                        out_lines.append(extra)
+
+            out_text = "\n".join(out_lines)
+            logger.info(
+                f"Transcription parsing completed successfully: {len(out_text)} chars output"
+            )
+            return StageOutput(
+                trc_outputs={"transcription_parsing": out_text},
+                input_info=f"Input: {len(raw_vtt_content)} chars",
+                output_info=f"Output: {len(out_text)} chars",
+            )
+        except Exception as e:
+            logger.error(f"Transcription parsing failed: {e}", exc_info=True)
+            raise
 
     def _clean_vtt_content_newlines_in_voice_tags(self, vtt_content: str) -> str:
         return re.sub(

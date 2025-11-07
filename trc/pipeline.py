@@ -49,15 +49,54 @@ class StageLog:
     messages: list[str] = field(default_factory=list)
 
 
-def setup_logging(log_path: Path = Path("app.log")) -> None:
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-        handlers=[
-            logging.FileHandler(log_path),
-            logging.StreamHandler(),
-        ],
+def setup_logging(log_path: Path = Path("app.log"), level: str = "INFO") -> None:
+    """Setup comprehensive logging configuration.
+
+    Args:
+        log_path: Path to log file
+        level: Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+    """
+    # Convert string level to logging level
+    numeric_level = getattr(logging, level.upper(), logging.INFO)
+
+    # Create formatters
+    file_formatter = logging.Formatter(
+        "%(asctime)s %(levelname)-8s %(name)-30s %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S"
     )
+    console_formatter = logging.Formatter(
+        "%(levelname)-8s %(name)-30s %(message)s"
+    )
+
+    # Setup root logger
+    root_logger = logging.getLogger()
+    root_logger.setLevel(numeric_level)
+
+    # Clear existing handlers
+    root_logger.handlers.clear()
+
+    # File handler - logs everything
+    file_handler = logging.FileHandler(log_path)
+    file_handler.setLevel(logging.DEBUG)
+    file_handler.setFormatter(file_formatter)
+    root_logger.addHandler(file_handler)
+
+    # Console handler - only INFO and above
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.INFO)
+    console_handler.setFormatter(console_formatter)
+    root_logger.addHandler(console_handler)
+
+    # Set specific loggers to DEBUG if requested
+    if level.upper() == "DEBUG":
+        # Enable debug logging for pipeline stages
+        logging.getLogger("trc.stages").setLevel(logging.DEBUG)
+        # Enable debug logging for LLM interactions
+        logging.getLogger("trc.llm").setLevel(logging.DEBUG)
+
+    # Log the setup
+    logger = logging.getLogger("trc.pipeline")
+    logger.info(f"Logging initialized at level {level} to {log_path}")
 
 
 # Helpers
