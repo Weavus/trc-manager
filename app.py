@@ -15,10 +15,12 @@ from trc.pipeline import (
     PEOPLE_PATH,
     list_incidents,
     load_people_directory,
-    parse_filename as parse_filename_info,
     process_pipeline,
     save_people_directory,
     setup_logging,
+)
+from trc.pipeline import (
+    parse_filename as parse_filename_info,
 )
 
 
