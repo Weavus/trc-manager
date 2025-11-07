@@ -71,7 +71,13 @@ def _copy_script(content: str) -> None:
 
 
 def init_state() -> None:
-    st.session_state.setdefault("page", "Transcript Upload")
+    # Check if there are any existing TRCs to determine default page
+    incidents = list_incidents()
+    total_trcs = sum(len(inc.get("trcs", [])) for inc in incidents)
+
+    # Default to TRC Library if there are existing TRCs, otherwise Transcript Upload
+    default_page = "TRC Library" if total_trcs > 0 else "Transcript Upload"
+    st.session_state.setdefault("page", default_page)
     st.session_state.setdefault(
         "filters",
         {
@@ -100,26 +106,26 @@ def sidebar_nav() -> None:
                 "name": "Transcript Upload",
                 "icon": "📤",
                 "description": "Upload and process transcript files",
-                "badge": None
+                "badge": None,
             },
             {
                 "name": "TRC Library",
                 "icon": "📚",
                 "description": "Browse and manage processed TRCs",
-                "badge": f"{total_incidents}"
+                "badge": f"{total_incidents}",
             },
             {
                 "name": "People Directory",
                 "icon": "👥",
                 "description": "Manage participant information",
-                "badge": f"{len(load_people_directory())}"
+                "badge": f"{len(load_people_directory())}",
             },
             {
                 "name": "Configuration",
                 "icon": "⚙️",
                 "description": "System settings and pipeline config",
-                "badge": None
-            }
+                "badge": None,
+            },
         ]
 
         current = st.session_state.get("page", nav_items[0]["name"])
@@ -135,7 +141,8 @@ def sidebar_nav() -> None:
 
             # Use different styling for active vs inactive
             if is_active:
-                st.markdown(f"""
+                st.markdown(
+                    f"""
                 <div style="
                     background-color: #e3f2fd;
                     border-left: 4px solid #1976d2;
@@ -145,15 +152,17 @@ def sidebar_nav() -> None:
                     font-weight: 600;
                     color: #1976d2;
                 ">
-                    {item['icon']} {item['name']} {f"({item['badge']})" if item["badge"] else ""}
+                    {item["icon"]} {item["name"]} {f"({item['badge']})" if item["badge"] else ""}
                 </div>
-                """, unsafe_allow_html=True)
+                """,
+                    unsafe_allow_html=True,
+                )
                 st.caption(f"📍 {item['description']}")
             else:
                 if st.button(
                     button_label,
                     key=f"nav_{item['name'].replace(' ', '_').lower()}",
-                    use_container_width=True
+                    use_container_width=True,
                 ):
                     st.session_state["page"] = item["name"]
                     st.rerun()
@@ -192,6 +201,15 @@ def page_upload() -> None:
     if "processed_files" not in st.session_state:
         st.session_state.processed_files = set()
 
+    # Initialize uploader reset counter
+    if "uploader_reset_counter" not in st.session_state:
+        st.session_state.uploader_reset_counter = 0
+
+    # Check if we need to reset the uploader after processing
+    if st.session_state.get("reset_uploader_after_processing", False):
+        st.session_state.uploader_reset_counter += 1
+        st.session_state.reset_uploader_after_processing = False
+
     st.markdown("---")
 
     # Upload section with improved design
@@ -217,29 +235,20 @@ def page_upload() -> None:
         - Processing includes participant analysis, summarization, and keyword extraction
         """)
 
-    # File uploader with better styling
+    # File uploader with better styling (key changes to reset after processing)
+    uploader_key = f"file_uploader_{st.session_state.uploader_reset_counter}"
     files = st.file_uploader(
         "Select TRC .vtt files to upload and process",
         type=["vtt"],
         accept_multiple_files=True,
-        help="Choose one or more .vtt transcript files following the naming convention above"
+        help="Choose one or more .vtt transcript files following the naming convention above",
+        key=uploader_key,
     )
-
-    # Clear processed list button
-    col1, col2, col3 = st.columns([2, 2, 1])
-    with col3:
-        if st.button(
-            "🔄 Clear History",
-            help="Clear the list of processed files to allow re-uploading",
-            use_container_width=True
-        ):
-            st.session_state.processed_files.clear()
-            st.success("✅ Processing history cleared!")
-            st.rerun()
 
     if not files:
         # Enhanced empty state
-        st.markdown("""
+        st.markdown(
+            """
         <div style="
             text-align: center;
             padding: 3rem;
@@ -257,16 +266,13 @@ def page_upload() -> None:
                 💡 <strong>Tip:</strong> Check the requirements above if you're unsure about file formatting
             </div>
         </div>
-        """, unsafe_allow_html=True)
+        """,
+            unsafe_allow_html=True,
+        )
         return
 
-    # File analysis and processing section
-    st.markdown("---")
-    st.markdown("### 🔄 Processing Status")
-
-    # Filter out already processed files
+    # Filter out already processed files (internal logic)
     unprocessed_files = []
-    skipped_files = []
     for up in files:
         # Create a unique identifier for the file based on name and content hash
         content = up.read()
@@ -275,44 +281,37 @@ def page_upload() -> None:
 
         if file_id not in st.session_state.processed_files:
             unprocessed_files.append(up)
-        else:
-            skipped_files.append(up.name)
 
-    # Display file status summary
-    total_files = len(files)
-    processed_count = len(skipped_files)
-    to_process_count = len(unprocessed_files)
-
-    # Status cards
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.metric("📁 Total Files", total_files)
-    with col2:
-        st.metric("✅ Already Processed", processed_count)
-    with col3:
-        st.metric("🔄 To Process", to_process_count)
-
-    # Show feedback about skipped files
-    if skipped_files:
-        with st.expander(f"ℹ️ Already Processed Files ({len(skipped_files)})", expanded=False):
-            for filename in skipped_files:
-                st.markdown(f"• {filename}")
-            st.info("These files have already been processed. Use 'Clear History' to re-upload if needed.")
-
+    # If all files are already processed, show message and return
     if not unprocessed_files:
         st.success("🎉 All selected files have already been processed!")
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("📚 Go to Library", use_container_width=True):
+                st.session_state["navigate_to_library"] = True
+                st.rerun()
+        with col2:
+            if st.button(
+                "🔄 Clear History & Upload Again",
+                key="clear_and_upload_again",
+                use_container_width=True,
+            ):
+                st.session_state.processed_files.clear()
+                st.session_state.uploader_reset_counter += 1
+                st.rerun()
         return
 
     # Processing section
     st.markdown("---")
     st.markdown("### ⚙️ Processing Files")
 
-    files = unprocessed_files
-    st.info(f"📋 Ready to process {len(files)} file{'s' if len(files) != 1 else ''}...")
+    st.info(
+        f"📋 Ready to process {len(unprocessed_files)} file{'s' if len(unprocessed_files) != 1 else ''}..."
+    )
 
     # Process button
     if st.button("🚀 Start Processing", type="primary", use_container_width=True):
-        process_uploaded_files(files)
+        process_uploaded_files(unprocessed_files)
     else:
         st.caption("Click above to begin processing the uploaded files")
 
@@ -326,13 +325,15 @@ def process_uploaded_files(files):
         name = up.name
         progress = (i + 1) / len(files)
         progress_bar.progress(progress)
-        status_text.text(f"Processing {i+1}/{len(files)}: {name}")
+        status_text.text(f"Processing {i + 1}/{len(files)}: {name}")
 
         content = up.read()
         inc_id, dt_token = parse_filename_info(name)
 
         if not inc_id or not dt_token:
-            st.error(f"❌ **{name}**: Invalid filename format. Must include INC id and DDMMYYYY-HHMM time.")
+            st.error(
+                f"❌ **{name}**: Invalid filename format. Must include INC id and DDMMYYYY-HHMM time."
+            )
             continue
 
         # Derive ISO time from ddmmyyyy-hhmm
@@ -353,35 +354,7 @@ def process_uploaded_files(files):
         match = next((t for t in trcs if t.get("start_time") == start_iso), None)
         new_hash = __import__("hashlib").sha256(content).hexdigest()
 
-        # Handle overwrite scenarios
-        if match:
-            old_hash = match.get("file_hash")
-            if old_hash and old_hash == new_hash:
-                st.warning(f"⚠️ **{name}**: Identical TRC already exists for {inc_id} at {start_iso}")
-                col1, col2 = st.columns(2)
-                with col1:
-                    if st.button(f"Overwrite Anyway", key=f"overwrite_same_{inc_id}_{start_iso}_{name}"):
-                        st.session_state[f"confirm_overwrite_{inc_id}_{start_iso}"] = True
-                        st.rerun()
-                with col2:
-                    if st.button(f"Skip", key=f"skip_same_{inc_id}_{start_iso}_{name}"):
-                        continue
-                if not st.session_state.get(f"confirm_overwrite_{inc_id}_{start_iso}", False):
-                    continue
-            else:
-                st.warning(f"⚠️ **{name}**: Different TRC exists for {inc_id} at {start_iso}")
-                col1, col2 = st.columns(2)
-                with col1:
-                    if st.button(f"Replace Existing", key=f"overwrite_diff_{inc_id}_{start_iso}_{name}"):
-                        st.session_state[f"confirm_replace_{inc_id}_{start_iso}"] = True
-                        st.rerun()
-                with col2:
-                    if st.button(f"Skip", key=f"skip_diff_{inc_id}_{start_iso}_{name}"):
-                        continue
-                if not st.session_state.get(f"confirm_replace_{inc_id}_{start_iso}", False):
-                    continue
-
-        # Update existing TRC if overwriting
+        # Update existing TRC if overwriting (automatic overwrite)
         if match:
             try:
                 inc_doc = existing if existing else json.loads(inc_path.read_text())
@@ -389,7 +362,9 @@ def process_uploaded_files(files):
                 inc_doc = existing
             for t in inc_doc.get("trcs", []):
                 if t.get("start_time") == start_iso:
-                    t.setdefault("pipeline_outputs", {})["raw_vtt"] = content.decode("utf-8", errors="ignore")
+                    t.setdefault("pipeline_outputs", {})["raw_vtt"] = content.decode(
+                        "utf-8", errors="ignore"
+                    )
                     t["file_hash"] = new_hash
                     break
             inc_path.write_text(json.dumps(inc_doc, indent=2))
@@ -421,11 +396,16 @@ def process_uploaded_files(files):
             inc_path.write_text(json.dumps(inc, indent=2))
 
         else:
-            st.error(f"❌ **{name}**: Processing failed for {inc_id} at stage {result.failed_stage}")
+            st.error(
+                f"❌ **{name}**: Processing failed for {inc_id} at stage {result.failed_stage}"
+            )
 
     # Clear progress indicators
     progress_bar.empty()
     status_text.empty()
+
+    # Set flag to reset the uploader on next page load
+    st.session_state.reset_uploader_after_processing = True
 
     # Final summary
     st.success("🎉 File processing complete!")
@@ -433,336 +413,14 @@ def process_uploaded_files(files):
     # Quick actions
     col1, col2 = st.columns(2)
     with col1:
-        if st.button("📚 Go to Library", key="goto_library_after_upload", use_container_width=True):
-            st.session_state["page"] = "TRC Library"
+        if st.button("📚 Go to Library", use_container_width=True):
+            st.session_state["navigate_to_library"] = True
             st.rerun()
     with col2:
         if st.button("📤 Upload More Files", key="upload_more_files", use_container_width=True):
+            # Clear processed files history to allow re-uploading same files if needed
+            st.session_state.processed_files.clear()
             st.rerun()
-
-    for up in files:
-        name = up.name
-        content = up.read()
-        inc_id, dt_token = parse_filename_info(name)
-        if not inc_id or not dt_token:
-            st.error("Error: Filename must include INC id and DDMMYYYY-HHMM time.")
-            continue
-
-        # derive ISO time from ddmmyyyy-hhmm
-        try:
-            dt = datetime.strptime(dt_token, "%d%m%Y-%H%M")
-            start_iso = dt.strftime("%Y-%m-%dT%H:%M:00Z")
-        except Exception:
-            st.error("Error: Invalid date-time in filename; expected DDMMYYYY-HHMM.")
-            continue
-
-        inc_path = INCIDENTS_DIR / f"{inc_id}.json"
-        existing: dict[str, Any] = {}
-        if inc_path.exists():
-            existing = json.loads(inc_path.read_text())
-        trcs = existing.get("trcs", [])
-        match = next((t for t in trcs if t.get("start_time") == start_iso), None)
-        new_hash = __import__("hashlib").sha256(content).hexdigest()
-
-        go = True
-        # Overwrite handling
-        if match:
-            go = False
-            old_hash = match.get("file_hash")
-            if old_hash and old_hash == new_hash:
-                st.warning(f"An identical TRC for {inc_id} at {start_iso} already exists.")
-                col1, col2 = st.columns(2)
-                with col1:
-                    if st.button(
-                        f"Proceed and overwrite {inc_id} {start_iso}",
-                        key=f"overwrite_same_{inc_id}_{start_iso}_{name}",
-                    ):
-                        go = True
-                with col2:
-                    if st.button(
-                        f"Cancel {inc_id} {start_iso}",
-                        key=f"cancel_same_{inc_id}_{start_iso}_{name}",
-                    ):
-                        go = False
-                if not go:
-                    continue
-            else:
-                st.warning(
-                    f"A different TRC for {inc_id} at {start_iso} already exists. "
-                    "Overwrite and re-process?"
-                )
-                col1, col2 = st.columns(2)
-                go = False
-                with col1:
-                    if st.button(
-                        f"Overwrite {inc_id} {start_iso}",
-                        key=f"overwrite_diff_{inc_id}_{start_iso}_{name}",
-                    ):
-                        go = True
-                with col2:
-                    if st.button(
-                        f"Cancel {inc_id} {start_iso}",
-                        key=f"cancel_diff_{inc_id}_{start_iso}_{name}",
-                    ):
-                        go = False
-                if not go:
-                    continue
-            # If overwriting existing TRC, update raw_vtt and file_hash before processing
-            try:
-                inc_doc = existing if existing else json.loads(inc_path.read_text())
-            except Exception:
-                inc_doc = existing
-            for t in inc_doc.get("trcs", []):
-                if t.get("start_time") == start_iso:
-                    t.setdefault("pipeline_outputs", {})["raw_vtt"] = content.decode(
-                        "utf-8", errors="ignore"
-                    )
-                    t["file_hash"] = new_hash
-                    break
-            inc_path.write_text(json.dumps(inc_doc, indent=2))
-
-        if not go:
-            # Skip saving & processing until user confirms overwrite
-            continue
-
-        # Save upload now that we are cleared to proceed
-        upload_dir = DATA_DIR / "uploads" / inc_id
-        upload_dir.mkdir(parents=True, exist_ok=True)
-        save_name = f"{inc_id}-{dt_token}.vtt"
-        save_path = upload_dir / save_name
-        save_path.write_bytes(content)
-
-        with st.spinner(f"Processing Incident {inc_id}..."):
-            result = process_pipeline(content.decode("utf-8", errors="ignore"), inc_id, start_iso)
-        if result.success:
-            st.success(f"Successfully processed {inc_id}!")
-            # Mark this file as processed
-            file_id = f"{name}_{hash(content)}"
-            st.session_state.processed_files.add(file_id)
-
-            # update incident file with origin meta
-            inc = json.loads(inc_path.read_text())
-            trc = next(t for t in inc["trcs"] if t["trc_id"] == result.trc_id)
-            trc["original_filename"] = save_name
-            trc["original_filepath"] = str(save_path)
-            trc["file_hash"] = new_hash
-            inc_path.write_text(json.dumps(inc, indent=2))
-
-            # Stage logs expanders
-            st.subheader("Pipeline Stages")
-            # Load fresh incident + trc for displaying inputs/outputs
-            inc_view = json.loads(inc_path.read_text())
-            trc_view = next(t for t in inc_view.get("trcs", []) if t.get("trc_id") == result.trc_id)
-
-            # Helper mapping for stage input/output keys
-            input_key_map: dict[str, str] = {
-                "transcription_parsing": "raw_vtt",
-                "text_enhancement": "transcription_parsing",
-                "noise_reduction": "text_enhancement",
-                "participant_analysis": "noise_reduction",
-                "summarisation": "noise_reduction",
-                "keyword_extraction": "noise_reduction",
-            }
-
-            for log in result.stage_logs:
-                prefix = (
-                    "✅ "
-                    if log.status == "Completed"
-                    else ("❌ " if log.status == "Failed" else "⏭️ ")
-                )
-                title = prefix + f"{log.name}"
-                open_key = f"stage_open_{result.trc_id}_{log.name}"
-                if open_key not in st.session_state:
-                    st.session_state[open_key] = False
-                with st.expander(title, expanded=st.session_state[open_key]):
-                    c1, c2, c3 = st.columns(3)
-                    with c1:
-                        st.text(f"Status: {log.status}")
-                    with c2:
-                        st.text(f"Duration: {log.duration_s:.2f}s")
-                    with c3:
-                        st.text(f"Messages: {len(log.messages)}")
-
-                    in_col, out_col = st.columns(2)
-                    stage = log.name
-                    text_enhancement_diffs_data = None
-
-                    # Helper mapping for stage input/output keys
-                    input_key_map: dict[str, str] = {
-                        "transcription_parsing": "raw_vtt",
-                        "text_enhancement": "transcription_parsing",
-                        "noise_reduction": "text_enhancement",
-                        "participant_analysis": "noise_reduction",
-                        "summarisation": "noise_reduction",
-                        "keyword_extraction": "noise_reduction",
-                    }
-
-                    # Inputs
-                    with in_col:
-                        st.markdown("**Inputs**")
-                        if stage == "master_summary_synthesis":
-                            summaries = [
-                                t.get("pipeline_outputs", {}).get("summarisation", "")
-                                for t in inc_view.get("trcs", [])
-                            ]
-                            agg = "\n\n".join([s for s in summaries if s])
-                            label_ms_in = f"summarisation (all TRCs) {_format_chars_and_size(agg)}"
-                            st.text_area(
-                                label_ms_in,
-                                value=agg,
-                                height=400,
-                                disabled=True,
-                                key=f"in_ms_agg_{inc_id}_{result.trc_id}",
-                            )
-                        else:
-                            key = input_key_map.get(stage)
-                            if key:
-                                val = trc_view.get("pipeline_outputs", {}).get(key, "")
-                                if isinstance(val, (dict, list)):
-                                    st.json(val)
-                                else:
-                                    label = f"{key} {_format_chars_and_size(val or '')}"
-                                    st.text_area(
-                                        label,
-                                        value=val or "",
-                                        height=400,
-                                        disabled=True,
-                                        key=f"in_{stage}_{key}_{result.trc_id}",
-                                    )
-
-                    # Outputs
-                    with out_col:
-                        st.markdown("**Outputs**")
-                        if stage == "master_summary_synthesis":
-                            ms_text = inc_view.get("master_summary", "")
-                            st.text_area(
-                                f"master_summary {_format_chars_and_size(ms_text)}",
-                                value=ms_text,
-                                height=400,
-                                disabled=True,
-                                key=f"out_ms_{inc_id}_{result.trc_id}",
-                            )
-
-                            # Incident-level artifacts
-                            inc_art = inc_view.get("pipeline_artifacts", {}) or {}
-                            ms_art = inc_art.get("master_summary_raw_llm_output")
-                            if ms_art:
-                                try:
-                                    with open(ms_art, encoding="utf-8") as f:
-                                        raw = f.read()
-                                    label_ms_raw = (
-                                        "master_summary_raw_llm_output "
-                                        f"{_format_chars_and_size(raw)}"
-                                    )
-                                    st.text_area(
-                                        label_ms_raw,
-                                        value=raw,
-                                        height=400,
-                                        disabled=True,
-                                        key=f"ms_raw_{inc_id}_{result.trc_id}",
-                                    )
-                                except Exception:
-                                    st.caption("master_summary_raw_llm_output: (unavailable)")
-                        else:
-                            po = trc_view.get("pipeline_outputs", {})
-                            # primary outputs per stage
-                            out_key = None
-                            if stage in (
-                                "transcription_parsing",
-                                "text_enhancement",
-                                "noise_reduction",
-                                "summarisation",
-                            ):
-                                out_key = stage if stage != "summarisation" else "summarisation"
-                            elif stage == "participant_analysis":
-                                out_key = "participant_analysis"
-                            elif stage == "keyword_extraction":
-                                out_key = "keywords"
-
-                            if out_key and out_key in po:
-                                val = po[out_key]
-                                if isinstance(val, (dict, list)):
-                                    st.json(val)
-                                else:
-                                    st.text_area(
-                                        f"{out_key} {_format_chars_and_size(val or '')}",
-                                        value=val or "",
-                                        height=400,
-                                        disabled=True,
-                                        key=f"out_{out_key}_{trc_view.get('trc_id')}_{result.trc_id}",
-                                    )
-
-                            # Show stage artifacts if present
-                            arts = trc_view.get("pipeline_artifacts", {}) or {}
-                            artifact_keys: list[str] = []
-                            if stage == "summarisation":
-                                artifact_keys = ["summarisation_llm_output"]
-                            elif stage == "participant_analysis":
-                                artifact_keys = [
-                                    "participant_analysis_llm_output",
-                                    "participant_analysis_llm_output_raw",
-                                ]
-                            elif stage == "text_enhancement":
-                                artifact_keys = ["text_enhancement_diffs"]
-                            for ak in artifact_keys:
-                                path = arts.get(ak)
-                                if not path:
-                                    continue
-                                try:
-                                    if (
-                                        ak.endswith("_raw")
-                                        or ak.endswith("_llm_output")
-                                        and path.endswith(".txt")
-                                    ) and path.endswith(".txt"):
-                                        with open(path, encoding="utf-8") as f:
-                                            raw = f.read()
-                                        st.text_area(
-                                            f"{ak} {_format_chars_and_size(raw)}",
-                                            value=raw,
-                                            height=400,
-                                            disabled=True,
-                                            key=f"art_{ak}_{trc_view.get('trc_id')}_{result.trc_id}",
-                                        )
-                                    elif path.endswith(".json"):
-                                        with open(path, encoding="utf-8") as f:
-                                            data = json.loads(f.read())
-                                        if ak == "text_enhancement_diffs":
-                                            text_enhancement_diffs_data = data
-                                        else:
-                                            st.json(data)
-                                except Exception:
-                                    st.caption(f"{ak}: (unavailable)")
-
-                    # Display text enhancement diffs full-width if present
-                    if text_enhancement_diffs_data and stage == "text_enhancement":
-                        total_reps = text_enhancement_diffs_data.get("total_replacements", 0)
-                        st.markdown(f"**Total replacements: {total_reps}**")
-                        changes = text_enhancement_diffs_data.get("changes", [])
-                        if changes:
-                            st.markdown("**Text Enhancement Differences:**")
-                            for i, change in enumerate(changes):
-                                hhmm = change.get("hhmm", "N/A")
-                                speaker = change.get("speaker", "N/A")
-                                with st.expander(
-                                    f"Change {i + 1}: {hhmm} - {speaker}",
-                                    expanded=False,
-                                ):
-                                    old_text = change.get("old_dialogue", "")
-                                    new_text = change.get("new_dialogue", "")
-                                    diff_viewer(old_text=old_text, new_text=new_text)
-                        else:
-                            st.caption("No changes recorded")
-
-                    # Any log messages
-                    for m in log.messages:
-                        st.info(m)
-            if not result.success:
-                st.error(
-                    f"Processing failed for {inc_id} at stage: {result.failed_stage}. "
-                    "See details above."
-                )
-        else:
-            st.error(f"Processing failed for {inc_id} at stage: {result.failed_stage}.")
 
 
 def filter_incidents(incidents: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -817,16 +475,8 @@ def filter_incidents(incidents: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 def page_library() -> None:
     # Page header with improved styling
-    col1, col2 = st.columns([3, 1])
-    with col1:
-        st.markdown("# 📚 TRC Library")
-        st.markdown("*Browse and manage processed Technical Recovery Calls*")
-    with col2:
-        # Quick stats
-        total_incidents = len(list_incidents())
-        total_trcs = sum(len(inc.get("trcs", [])) for inc in list_incidents())
-        st.metric("Total Incidents", total_incidents)
-        st.metric("Total TRCs", total_trcs)
+    st.markdown("# 📚 TRC Library")
+    st.markdown("*Browse and manage processed Technical Recovery Calls*")
 
     incidents = list_incidents()
 
@@ -854,10 +504,6 @@ def page_library() -> None:
     people_dir = load_people_directory()
     all_people = sorted(list(people_dir.keys()))
 
-    # Main page filters section
-    st.markdown("---")
-    st.markdown("### 🔍 Filters & View Options")
-
     # Basic filters row
     col1, col2, col3, col4 = st.columns([2, 2, 2, 2])
     with col1:
@@ -865,14 +511,14 @@ def page_library() -> None:
             "Filter by Incident ID",
             options=all_ids,
             default=st.session_state["filters"].get("incident_ids", []),
-            help="Select specific incident IDs to display"
+            help="Select specific incident IDs to display",
         )
     with col2:
         st.session_state["filters"]["titles"] = st.multiselect(
             "Filter by Title",
             options=all_titles,
             default=st.session_state["filters"].get("titles", []),
-            help="Filter incidents by their titles"
+            help="Filter incidents by their titles",
         )
     with col3:
         # Date range filter with presets
@@ -882,7 +528,7 @@ def page_library() -> None:
         date_preset = st.selectbox(
             "Date Range",
             ["All Dates", "Today", "Last 7 days", "Last 30 days", "Last 90 days", "Custom Range"],
-            help="Choose a date range or select custom range"
+            help="Choose a date range or select custom range",
         )
 
         # Calculate date ranges based on preset
@@ -905,7 +551,7 @@ def page_library() -> None:
                     min_value=min_date,
                     max_value=max_date,
                     key="custom_date_range",
-                    help="Select start and end dates"
+                    help="Select start and end dates",
                 )
                 if len(selected_date_range) != 2:
                     selected_date_range = None
@@ -917,55 +563,36 @@ def page_library() -> None:
         # Store the selected date range for filtering
         selected_date = selected_date_range  # This will be used in the filtering logic
     with col4:
-        st.session_state["filters"]["people"] = st.multiselect(
+        people_filter = st.multiselect(
             "Filter by People",
             options=all_people,
             default=st.session_state["filters"].get("people", []),
-            help="Show incidents involving specific people"
+            help="Show incidents involving specific people",
         )
 
-    # View options row
-    st.markdown("---")
-    col1, col2, col3, col4 = st.columns([2, 2, 2, 1])
+    # View options and search row
+    col1, col2, col3 = st.columns([2, 2, 4])
     with col1:
         view_mode = st.selectbox(
-            "View Mode",
-            ["Cards", "List", "Timeline"],
-            help="Choose how to display incidents"
+            "View Mode", ["Cards", "List", "Timeline"], help="Choose how to display incidents"
         )
     with col2:
         sort_by = st.selectbox(
-            "Sort By",
-            ["Newest First", "Oldest First"],
-            help="Sort incidents by date"
+            "Sort By", ["Newest First", "Oldest First"], help="Sort incidents by date"
         )
     with col3:
-        status_filter = st.selectbox(
-            "Status",
-            ["All", "Complete", "Processing", "Failed"],
-            help="Filter by processing status"
+        search_term = st.text_input(
+            "Search",
+            placeholder="Search incidents, titles, or content...",
+            help="Full-text search across all incident data",
         )
-    with col4:
-        if st.button("🔍 Advanced", use_container_width=True, help="Show advanced filtering options"):
-            st.session_state.show_advanced_filters = not st.session_state.get("show_advanced_filters", False)
 
-    # Advanced filters (collapsible)
-    if st.session_state.get("show_advanced_filters", False):
-        with st.expander("Advanced Filters", expanded=True):
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                search_term = st.text_input("Search", placeholder="Search incidents, titles, or content...", help="Full-text search across all incident data")
-            with col2:
-                date_range = st.date_input("Date Range", value=[], key="library_date_range", help="Filter by a range of dates")
-            with col3:
-                priority_filter = st.multiselect(
-                    "Priority",
-                    ["High", "Medium", "Low"],
-                    help="Filter by incident priority levels"
-                )
+    # Update session state with current filter values
+    st.session_state["filters"]["people"] = people_filter
 
-    # Apply advanced filters if shown
-    search_term = st.session_state.get("search_term", "")
+    st.markdown("---")
+
+    # Apply filters
     date_range = st.session_state.get("library_date_range", [])
     priority_filter = st.session_state.get("priority_filter", [])
 
@@ -974,7 +601,7 @@ def page_library() -> None:
     f = st.session_state["filters"]
     ids = set(f.get("incident_ids") or [])
     titles = set(f.get("titles") or [])
-    people = set(f.get("people") or [])
+    people = set(people_filter)
 
     for item in all_trcs:
         trc = item["trc"]
@@ -1017,7 +644,8 @@ def page_library() -> None:
 
     if not filtered_trcs:
         # Enhanced empty state
-        st.markdown("""
+        st.markdown(
+            """
         <div style="
             text-align: center;
             padding: 3rem;
@@ -1031,7 +659,9 @@ def page_library() -> None:
                 Try adjusting your search criteria or upload some TRC files.
             </p>
         </div>
-        """, unsafe_allow_html=True)
+        """,
+            unsafe_allow_html=True,
+        )
 
         # Quick actions for empty state
         col1, col2, col3 = st.columns(3)
@@ -1144,19 +774,22 @@ def display_incident_card(incident_id, incident_data):
     trcs.sort(key=lambda t: t.get("start_time", ""))
 
     # Get incident metadata
-    title = inc.get('title') or '(no title)'
-    master_summary = inc.get('master_summary', '')
+    title = inc.get("title") or "(no title)"
+    master_summary = inc.get("master_summary", "")
     trc_count = len(trcs)
 
     # Determine status
-    has_errors = any(trc.get('pipeline_outputs', {}).get('error') for trc in trcs)
-    is_complete = all(trc.get('pipeline_outputs', {}).get('summarisation') for trc in trcs)
+    has_errors = any(trc.get("pipeline_outputs", {}).get("error") for trc in trcs)
+    is_complete = all(trc.get("pipeline_outputs", {}).get("summarisation") for trc in trcs)
 
     status_icon = "✅" if is_complete and not has_errors else "⚠️" if has_errors else "⏳"
-    status_color = "#28a745" if is_complete and not has_errors else "#ffc107" if has_errors else "#17a2b8"
+    status_color = (
+        "#28a745" if is_complete and not has_errors else "#ffc107" if has_errors else "#17a2b8"
+    )
 
     # Card layout
-    st.markdown(f"""
+    st.markdown(
+        f"""
     <div style="
         border: 1px solid #e9ecef;
         border-radius: 10px;
@@ -1173,14 +806,18 @@ def display_incident_card(incident_id, incident_data):
             </div>
             <div style="text-align: right;">
                 <div style="font-size: 1.5rem;">{status_icon}</div>
-                <div style="font-size: 0.8rem; color: {status_color};">{trc_count} TRC{trc_count != 1 and 's' or ''}</div>
+                <div style="font-size: 0.8rem; color: {status_color};">{trc_count} TRC{trc_count != 1 and "s" or ""}</div>
             </div>
         </div>
-    """, unsafe_allow_html=True)
+    """,
+        unsafe_allow_html=True,
+    )
 
     # Summary preview
     if master_summary:
-        summary_preview = master_summary[:150] + "..." if len(master_summary) > 150 else master_summary
+        summary_preview = (
+            master_summary[:150] + "..." if len(master_summary) > 150 else master_summary
+        )
         st.caption(f"📝 {summary_preview}")
     else:
         st.caption("📝 No summary available")
@@ -1189,10 +826,14 @@ def display_incident_card(incident_id, incident_data):
     col1, col2, col3 = st.columns(3)
     with col1:
         if st.button("👁️ View Details", key=f"view_{incident_id}", use_container_width=True):
-            st.session_state[f"expand_{incident_id}"] = not st.session_state.get(f"expand_{incident_id}", False)
+            st.session_state[f"expand_{incident_id}"] = not st.session_state.get(
+                f"expand_{incident_id}", False
+            )
     with col2:
         if st.button("✏️ Edit", key=f"edit_{incident_id}", use_container_width=True):
-            st.session_state[f"edit_mode_{incident_id}"] = not st.session_state.get(f"edit_mode_{incident_id}", False)
+            st.session_state[f"edit_mode_{incident_id}"] = not st.session_state.get(
+                f"edit_mode_{incident_id}", False
+            )
     with col3:
         if st.button("📊 Export", key=f"export_{incident_id}", use_container_width=True):
             st.info("Export feature coming soon!")
@@ -1306,13 +947,13 @@ def display_incident_details(incident_id, incident_data):
                                 st.markdown("**Inputs**")
                                 if tab_stage == "master_summary_synthesis":
                                     summaries = [
-                                        t.get("pipeline_outputs", {}).get(
-                                            "summarisation", ""
-                                        )
+                                        t.get("pipeline_outputs", {}).get("summarisation", "")
                                         for t in inc.get("trcs", [])
                                     ]
                                     agg = "\n\n".join([s for s in summaries if s])
-                                    label_ms_in = f"summarisation (all TRCs) {_format_chars_and_size(agg)}"
+                                    label_ms_in = (
+                                        f"summarisation (all TRCs) {_format_chars_and_size(agg)}"
+                                    )
                                     st.text_area(
                                         label_ms_in,
                                         value=agg,
@@ -1440,10 +1081,7 @@ def display_incident_details(incident_id, incident_data):
                                             st.caption(f"{ak}: (unavailable)")
 
                             # Display text enhancement diffs full-width if present
-                            if (
-                                text_enhancement_diffs_data
-                                and tab_stage == "text_enhancement"
-                            ):
+                            if text_enhancement_diffs_data and tab_stage == "text_enhancement":
                                 total_reps = text_enhancement_diffs_data.get(
                                     "total_replacements", 0
                                 )
@@ -1457,9 +1095,7 @@ def display_incident_details(incident_id, incident_data):
                                         with st.expander(title, expanded=False):
                                             old_text = change.get("old_dialogue", "")
                                             new_text = change.get("new_dialogue", "")
-                                            diff_viewer(
-                                                old_text=old_text, new_text=new_text
-                                            )
+                                            diff_viewer(old_text=old_text, new_text=new_text)
                                 elif not changes:
                                     st.caption("No changes recorded")
 
@@ -1509,9 +1145,7 @@ def display_incident_editor(incident_id, incident_data):
 
         # Title editor
         new_title = st.text_input(
-            "Incident Title",
-            value=inc.get("title", ""),
-            key=f"quick_title_{incident_id}"
+            "Incident Title", value=inc.get("title", ""), key=f"quick_title_{incident_id}"
         )
 
         # Summary editor
@@ -1519,13 +1153,15 @@ def display_incident_editor(incident_id, incident_data):
             "Master Summary",
             value=inc.get("master_summary", ""),
             height=150,
-            key=f"quick_summary_{incident_id}"
+            key=f"quick_summary_{incident_id}",
         )
 
         # Save/Cancel buttons
         col1, col2 = st.columns(2)
         with col1:
-            if st.button("💾 Save Changes", key=f"quick_save_{incident_id}", use_container_width=True):
+            if st.button(
+                "💾 Save Changes", key=f"quick_save_{incident_id}", use_container_width=True
+            ):
                 inc["title"] = new_title
                 inc["master_summary"] = new_summary
                 inc_path = INCIDENTS_DIR / f"{incident_id}.json"
@@ -1563,8 +1199,8 @@ def display_incidents_as_list(sorted_dates, incidents_by_date):
             trc_count = len(trcs)
 
             # Determine status
-            has_errors = any(trc.get('pipeline_outputs', {}).get('error') for trc in trcs)
-            is_complete = all(trc.get('pipeline_outputs', {}).get('summarisation') for trc in trcs)
+            has_errors = any(trc.get("pipeline_outputs", {}).get("error") for trc in trcs)
+            is_complete = all(trc.get("pipeline_outputs", {}).get("summarisation") for trc in trcs)
             status_icon = "✅" if is_complete and not has_errors else "⚠️" if has_errors else "⏳"
 
             # List item
@@ -1572,13 +1208,15 @@ def display_incidents_as_list(sorted_dates, incidents_by_date):
             with col1:
                 st.markdown(f"**{incident_id}**")
             with col2:
-                title = inc.get('title') or '(no title)'
+                title = inc.get("title") or "(no title)"
                 st.markdown(f"{title}")
             with col3:
                 st.markdown(f"{status_icon} {trc_count} TRC{trc_count != 1 and 's' or ''}")
             with col4:
                 if st.button("View", key=f"list_view_{incident_id}"):
-                    st.session_state[f"expand_{incident_id}"] = not st.session_state.get(f"expand_{incident_id}", False)
+                    st.session_state[f"expand_{incident_id}"] = not st.session_state.get(
+                        f"expand_{incident_id}", False
+                    )
 
             # Expanded details
             if st.session_state.get(f"expand_{incident_id}", False):
@@ -1609,7 +1247,8 @@ def display_incidents_as_timeline(sorted_dates, incidents_by_date):
             trcs = incident_data["trcs"]
 
             # Timeline item
-            st.markdown(f"""
+            st.markdown(
+                f"""
             <div style="
                 border-left: 3px solid #007bff;
                 padding-left: 1rem;
@@ -1626,14 +1265,18 @@ def display_incidents_as_timeline(sorted_dates, incidents_by_date):
                     border-radius: 50%;
                 "></div>
                 <h5 style="margin: 0; color: #007bff;">{incident_id}</h5>
-                <p style="margin: 0.5rem 0; color: #6c757d;">{inc.get('title') or '(no title)'}</p>
-                <small style="color: #6c757d;">{len(trcs)} TRC call{len(trcs) != 1 and 's' or ''}</small>
+                <p style="margin: 0.5rem 0; color: #6c757d;">{inc.get("title") or "(no title)"}</p>
+                <small style="color: #6c757d;">{len(trcs)} TRC call{len(trcs) != 1 and "s" or ""}</small>
             </div>
-            """, unsafe_allow_html=True)
+            """,
+                unsafe_allow_html=True,
+            )
 
             # Expand button
             if st.button(f"View Details for {incident_id}", key=f"timeline_view_{incident_id}"):
-                st.session_state[f"expand_{incident_id}"] = not st.session_state.get(f"expand_{incident_id}", False)
+                st.session_state[f"expand_{incident_id}"] = not st.session_state.get(
+                    f"expand_{incident_id}", False
+                )
 
             # Expanded details
             if st.session_state.get(f"expand_{incident_id}", False):
@@ -1968,27 +1611,21 @@ def page_people() -> None:
     col1, col2, col3, col4 = st.columns([2, 2, 2, 2])
     with col1:
         selected_names = st.multiselect(
-            "Filter by Name",
-            options=names,
-            help="Select specific people to display"
+            "Filter by Name", options=names, help="Select specific people to display"
         )
     with col2:
         selected_roles = st.multiselect(
-            "Filter by Role",
-            options=roles_set,
-            help="Show people with specific roles"
+            "Filter by Role", options=roles_set, help="Show people with specific roles"
         )
     with col3:
         selected_skills = st.multiselect(
             "Filter by Skill/Knowledge",
             options=skills_set,
-            help="Show people with specific skills or knowledge"
+            help="Show people with specific skills or knowledge",
         )
     with col4:
         view_mode = st.selectbox(
-            "View Mode",
-            ["Cards", "List"],
-            help="Choose how to display people"
+            "View Mode", ["Cards", "List"], help="Choose how to display people"
         )
 
     # Apply filters
@@ -2011,7 +1648,8 @@ def page_people() -> None:
 
     if not filtered:
         # Enhanced empty state
-        st.markdown("""
+        st.markdown(
+            """
         <div style="
             text-align: center;
             padding: 3rem;
@@ -2025,7 +1663,9 @@ def page_people() -> None:
                 People are automatically discovered during TRC processing.
             </p>
         </div>
-        """, unsafe_allow_html=True)
+        """,
+            unsafe_allow_html=True,
+        )
         return
 
     # Display people based on view mode
@@ -2072,13 +1712,27 @@ def display_person_card(person, directory):
     # Get stats
     roles_count = len(person.get("discovered_roles", []))
     skills_count = len(person.get("discovered_knowledge", []))
-    total_incidents = len(set(
-        [r.get("incident_id") for r in person.get("discovered_roles", []) if r.get("incident_id")] +
-        [k.get("incident_id") for k in person.get("discovered_knowledge", []) if k.get("incident_id")]
-    ))
+    total_incidents = len(
+        set(
+            [
+                r.get("incident_id")
+                for r in person.get("discovered_roles", [])
+                if r.get("incident_id")
+            ]
+            + [
+                k.get("incident_id")
+                for k in person.get("discovered_knowledge", [])
+                if k.get("incident_id")
+            ]
+        )
+    )
 
     # Create complete card as HTML to avoid Streamlit component rendering issues
-    role_html = f'<p style="margin: 0.25rem 0; color: #6c757d; font-size: 0.9rem;"><strong>Role:</strong> {role_override}</p>' if role_override else ''
+    role_html = (
+        f'<p style="margin: 0.25rem 0; color: #6c757d; font-size: 0.9rem;"><strong>Role:</strong> {role_override}</p>'
+        if role_override
+        else ""
+    )
 
     incidents_text = f"{total_incidents} incident{'s' if total_incidents != 1 else ''}"
 
@@ -2112,10 +1766,14 @@ def display_person_card(person, directory):
     col1, col2, col3 = st.columns(3)
     with col1:
         if st.button("👁️ View Details", key=f"view_{raw_name}", use_container_width=True):
-            st.session_state[f"expand_{raw_name}"] = not st.session_state.get(f"expand_{raw_name}", False)
+            st.session_state[f"expand_{raw_name}"] = not st.session_state.get(
+                f"expand_{raw_name}", False
+            )
     with col2:
         if st.button("✏️ Edit", key=f"edit_{raw_name}", use_container_width=True):
-            st.session_state[f"edit_mode_{raw_name}"] = not st.session_state.get(f"edit_mode_{raw_name}", False)
+            st.session_state[f"edit_mode_{raw_name}"] = not st.session_state.get(
+                f"edit_mode_{raw_name}", False
+            )
     with col3:
         if st.button("🔗 View Incidents", key=f"incidents_{raw_name}", use_container_width=True):
             # Filter TRC library by this person
@@ -2200,14 +1858,14 @@ def display_person_editor(person, directory):
         new_display_name = st.text_input(
             "Display Name",
             value=person.get("display_name", ""),
-            key=f"quick_display_name_{raw_name}"
+            key=f"quick_display_name_{raw_name}",
         )
 
         # Role override editor
         new_role_override = st.text_input(
             "Canonical Role (Override)",
             value=person.get("role_override", ""),
-            key=f"quick_role_override_{raw_name}"
+            key=f"quick_role_override_{raw_name}",
         )
 
         # Save/Cancel buttons
@@ -2221,8 +1879,13 @@ def display_person_editor(person, directory):
                 st.session_state[f"edit_mode_{raw_name}"] = False
                 st.rerun()
         with col2:
-            if st.button("❌ Cancel", key=f"quick_cancel_{raw_name}", use_container_width=True):
-                st.session_state[f"edit_mode_{raw_name}"] = False
+            if st.button(
+                "🔄 Clear History & Upload Again",
+                key="clear_and_upload_again",
+                use_container_width=True,
+            ):
+                st.session_state.processed_files.clear()
+                st.session_state.reset_uploader_after_processing = True
                 st.rerun()
 
 
@@ -2247,7 +1910,9 @@ def display_people_as_list(filtered_people, directory):
             st.markdown(f"👔 {roles_count} role{roles_count != 1 and 's' or ''}")
         with col4:
             if st.button("View", key=f"list_view_{raw_name}"):
-                st.session_state[f"expand_{raw_name}"] = not st.session_state.get(f"expand_{raw_name}", False)
+                st.session_state[f"expand_{raw_name}"] = not st.session_state.get(
+                    f"expand_{raw_name}", False
+                )
 
         # Expanded details
         if st.session_state.get(f"expand_{raw_name}", False):
@@ -2598,6 +2263,11 @@ def main() -> None:
     st.set_page_config(page_title="TRC Manager", layout="wide")
     init_state()
     sidebar_nav()
+
+    # Check for navigation flags
+    if st.session_state.get("navigate_to_library", False):
+        st.session_state["page"] = "TRC Library"
+        st.session_state["navigate_to_library"] = False
 
     page = st.session_state["page"]
     if page == "Transcript Upload":
