@@ -222,7 +222,10 @@ def page_upload() -> None:
                     else ("❌ " if log.status == "Failed" else "⏭️ ")
                 )
                 title = prefix + f"{log.name}"
-                with st.expander(title, expanded=False):
+                open_key = f"stage_open_{result.trc_id}_{log.name}"
+                if open_key not in st.session_state:
+                    st.session_state[open_key] = False
+                with st.expander(title, expanded=st.session_state[open_key]):
                     c1, c2, c3 = st.columns(3)
                     with c1:
                         st.text(f"Status: {log.status}")
@@ -281,6 +284,7 @@ def page_upload() -> None:
                                 help="Copy inputs to clipboard",
                             ):
                                 _copy_script(input_text or "")
+                                st.session_state[open_key] = True
 
                     # Outputs
                     with out_col:
@@ -389,6 +393,7 @@ def page_upload() -> None:
                                 help="Copy outputs to clipboard",
                             ):
                                 _copy_script(out_text or "")
+                                st.session_state[open_key] = True
 
                     # Any log messages
                     for m in log.messages:
