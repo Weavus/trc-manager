@@ -431,6 +431,7 @@ def process_pipeline(
     # Add LLM config to incident for stages to access
     if "llm" in config:
         incident["llm"] = config["llm"]
+        write_json(incident_path, incident)  # Save immediately to ensure it's updated
 
     trc_id = f"trc_{start_time_iso}"
     trc = next((t for t in incident.get("trcs", []) if t.get("trc_id") == trc_id), None)
