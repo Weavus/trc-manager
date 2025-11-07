@@ -644,7 +644,59 @@ def page_library() -> None:
     # Convert to list and sort for calendar
     trc_dates_list = sorted(list(trc_dates))
 
-    # Quick filters bar
+    # Prepare filter data
+    all_ids = [i.get("incident_id") for i in incidents]
+    all_titles = sorted({i.get("title") for i in incidents if i.get("title")})
+    people_dir = load_people_directory()
+    all_people = sorted(list(people_dir.keys()))
+
+    # Main page filters section
+    st.markdown("---")
+    st.markdown("### 🔍 Filters & View Options")
+
+    # Basic filters row
+    col1, col2, col3, col4 = st.columns([2, 2, 2, 2])
+    with col1:
+        st.session_state["filters"]["incident_ids"] = st.multiselect(
+            "Filter by Incident ID",
+            options=all_ids,
+            default=st.session_state["filters"].get("incident_ids", []),
+            help="Select specific incident IDs to display"
+        )
+    with col2:
+        st.session_state["filters"]["titles"] = st.multiselect(
+            "Filter by Title",
+            options=all_titles,
+            default=st.session_state["filters"].get("titles", []),
+            help="Filter incidents by their titles"
+        )
+    with col3:
+        # Calendar widget showing dates with TRCs
+        if trc_dates_list:
+            min_date = min(trc_dates_list)
+            max_date = max(trc_dates_list)
+            selected_date = st.date_input(
+                "Filter by Date",
+                value=None,
+                min_value=min_date,
+                max_value=max_date,
+                key="selected_date",
+                help="Select a specific date to show incidents from that day"
+            )
+            # Highlight dates with TRCs
+            if selected_date and selected_date not in trc_dates:
+                st.warning("No TRCs found for selected date")
+        else:
+            selected_date = None
+    with col4:
+        st.session_state["filters"]["people"] = st.multiselect(
+            "Filter by People",
+            options=all_people,
+            default=st.session_state["filters"].get("people", []),
+            help="Show incidents involving specific people"
+        )
+
+    # View options row
     st.markdown("---")
     col1, col2, col3, col4 = st.columns([2, 2, 2, 1])
     with col1:
@@ -666,7 +718,7 @@ def page_library() -> None:
             help="Filter by processing status"
         )
     with col4:
-        if st.button("🔍 Advanced Filters", use_container_width=True):
+        if st.button("🔍 Advanced", use_container_width=True, help="Show advanced filtering options"):
             st.session_state.show_advanced_filters = not st.session_state.get("show_advanced_filters", False)
 
     # Advanced filters (collapsible)
@@ -674,68 +726,20 @@ def page_library() -> None:
         with st.expander("Advanced Filters", expanded=True):
             col1, col2, col3 = st.columns(3)
             with col1:
-                search_term = st.text_input("Search", placeholder="Search incidents, titles, or content...")
+                search_term = st.text_input("Search", placeholder="Search incidents, titles, or content...", help="Full-text search across all incident data")
             with col2:
-                date_range = st.date_input("Date Range", value=[], key="library_date_range")
+                date_range = st.date_input("Date Range", value=[], key="library_date_range", help="Filter by a range of dates")
             with col3:
                 priority_filter = st.multiselect(
                     "Priority",
                     ["High", "Medium", "Low"],
-                    help="Filter by incident priority"
+                    help="Filter by incident priority levels"
                 )
-
-    # Filters
-    # Prepare filter data
-    all_ids = [i.get("incident_id") for i in incidents]
-    all_titles = sorted({i.get("title") for i in incidents if i.get("title")})
-    people_dir = load_people_directory()
-    all_people = sorted(list(people_dir.keys()))
 
     # Apply advanced filters if shown
     search_term = st.session_state.get("search_term", "")
     date_range = st.session_state.get("library_date_range", [])
     priority_filter = st.session_state.get("priority_filter", [])
-
-    # Legacy sidebar filters (keep for backward compatibility but hide if advanced filters are active)
-    if not st.session_state.get("show_advanced_filters", False):
-        with st.sidebar:
-            st.subheader("Filters")
-            st.session_state["filters"]["incident_ids"] = st.multiselect(
-                "Filter by Incident ID",
-                options=all_ids,
-                default=st.session_state["filters"].get("incident_ids", []),
-            )
-            st.session_state["filters"]["titles"] = st.multiselect(
-                "Filter by Title",
-                options=all_titles,
-                default=st.session_state["filters"].get("titles", []),
-            )
-
-            # Calendar widget showing dates with TRCs
-            if trc_dates_list:
-                min_date = min(trc_dates_list)
-                max_date = max(trc_dates_list)
-                selected_date = st.date_input(
-                    "Select Date (shows dates with TRCs)",
-                    value=None,
-                    min_value=min_date,
-                    max_value=max_date,
-                    key="selected_date",
-                )
-                # Highlight dates with TRCs
-                if selected_date and selected_date not in trc_dates:
-                    st.warning("No TRCs found for selected date")
-            else:
-                selected_date = None
-
-            st.session_state["filters"]["people"] = st.multiselect(
-                "Filter by People",
-                options=all_people,
-                default=st.session_state["filters"].get("people", []),
-            )
-    else:
-        # Use advanced filters
-        selected_date = None  # Advanced filters handle date filtering differently
 
     # Filter TRCs based on current filters
     filtered_trcs = []
