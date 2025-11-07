@@ -32,7 +32,7 @@ class ParticipantKnowledgeAnalysisStage:
             logger.debug("Using LLM for participant knowledge analysis")
             # Use LLM for participant knowledge analysis
             try:
-                llm_client = create_client_from_config(ctx.incident.get("llm", {}))
+                llm_client = create_client_from_config(ctx.llm_config or {})
                 prompt_file = llm_config["prompt_file"]
 
                 # Pass both transcript and existing roles for context

@@ -30,7 +30,7 @@ class MasterSummarySynthesisStage:
             logger.debug("Using LLM for master summary synthesis")
             # Use LLM for master summary synthesis
             try:
-                llm_client = create_client_from_config(ctx.incident.get("llm", {}))
+                llm_client = create_client_from_config(ctx.llm_config or {})
                 prompt_file = llm_config["prompt_file"]
 
                 summaries_text = "\n\n".join(

@@ -16,6 +16,7 @@ class RunContext:
     incidents_dir: Path
     people_path: Path
     artifacts_dir: Path
+    llm_config: dict[str, Any] | None = None
     start_dt: datetime | None = None
 
 

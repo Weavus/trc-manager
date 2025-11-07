@@ -45,7 +45,7 @@ class NoiseReductionStage:
             logger.debug("Using LLM for noise reduction")
             # Use LLM for noise reduction
             try:
-                llm_client = create_client_from_config(ctx.incident.get("llm", {}))
+                llm_client = create_client_from_config(ctx.llm_config or {})
                 prompt_file = llm_config["prompt_file"]
 
                 # For noise reduction, we need to provide known_terms and transcript

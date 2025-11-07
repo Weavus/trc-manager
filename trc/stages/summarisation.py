@@ -26,7 +26,7 @@ class SummarisationStage:
             logger.debug("Using LLM for summarization")
             # Use LLM for summarization
             try:
-                llm_client = create_client_from_config(ctx.incident.get("llm", {}))
+                llm_client = create_client_from_config(ctx.llm_config or {})
                 prompt_file = llm_config["prompt_file"]
 
                 summary = llm_client.call_llm_with_prompt_file(

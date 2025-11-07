@@ -20,7 +20,7 @@ class ParticipantAnalysisStage:
         if llm_config:
             # Use LLM for participant analysis
             try:
-                llm_client = create_client_from_config(ctx.incident.get("llm", {}))
+                llm_client = create_client_from_config(ctx.llm_config or {})
                 prompt_file = llm_config["prompt_file"]
 
                 payload = llm_client.call_llm_json_with_prompt_file(
