@@ -71,7 +71,7 @@ def _copy_script(content: str) -> None:
 
 
 def init_state() -> None:
-    st.session_state.setdefault("page", "TRC Upload")
+    st.session_state.setdefault("page", "Transcript Upload")
     st.session_state.setdefault(
         "filters",
         {
@@ -1047,8 +1047,8 @@ def page_library() -> None:
         # Quick actions for empty state
         col1, col2, col3 = st.columns(3)
         with col1:
-            if st.button("📤 Upload TRCs", use_container_width=True):
-                st.session_state["page"] = "TRC Upload"
+            if st.button("📤 Upload Transcripts", use_container_width=True):
+                st.session_state["page"] = "Transcript Upload"
                 st.rerun()
         with col2:
             if st.button("🔄 Clear Filters", use_container_width=True):
