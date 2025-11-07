@@ -1,0 +1,26 @@
+from __future__ import annotations
+
+import re
+from typing import Any
+
+from .base import RunContext, StageOutput
+
+
+class KeywordExtractionStage:
+    name = "keyword_extraction"
+    requires = ["refinement"]
+
+    def run(self, ctx: RunContext, params: dict[str, Any] | None = None) -> StageOutput:
+        refined = ctx.trc.get("pipeline_outputs", {}).get("refinement", "")
+        words = re.findall(r"[a-zA-Z]{6,}", refined.lower())
+        freq: dict[str, int] = {}
+        for w in words:
+            freq[w] = freq.get(w, 0) + 1
+        keywords = [w for w, _ in sorted(freq.items(), key=lambda x: (-x[1], x[0]))[:5]]
+        # Provide both trc-level and incident-level updates; runner will merge incident keywords
+        return StageOutput(
+            trc_outputs={"keywords": keywords},
+            incident_updates={"keywords": keywords},
+            input_info=f"Input: {len(refined)} chars",
+            output_info=f"Keywords: {len(keywords)}",
+        )
