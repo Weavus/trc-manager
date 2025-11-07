@@ -378,33 +378,33 @@ def page_upload() -> None:
                             elif stage == "text_enhancement":
                                 artifact_keys = ["text_enhancement_diffs"]
                             for ak in artifact_keys:
-                                  path = arts.get(ak)
-                                  if not path:
-                                      continue
-                                  try:
-                                      if (
-                                          ak.endswith("_raw")
-                                          or ak.endswith("_llm_output")
-                                          and path.endswith(".txt")
-                                      ) and path.endswith(".txt"):
-                                          with open(path, encoding="utf-8") as f:
-                                              raw = f.read()
-                                          st.text_area(
-                                              f"{ak} {_format_chars_and_size(raw)}",
-                                              value=raw,
-                                              height=400,
-                                              disabled=True,
-                                              key=f"art_{ak}_{trc_view.get('trc_id')}_{result.trc_id}",
-                                          )
-                                      elif path.endswith(".json"):
-                                          with open(path, encoding="utf-8") as f:
-                                              data = json.loads(f.read())
-                                          if ak == "text_enhancement_diffs":
-                                              text_enhancement_diffs_data = data
-                                          else:
-                                              st.json(data)
-                                  except Exception:
-                                      st.caption(f"{ak}: (unavailable)")
+                                path = arts.get(ak)
+                                if not path:
+                                    continue
+                                try:
+                                    if (
+                                        ak.endswith("_raw")
+                                        or ak.endswith("_llm_output")
+                                        and path.endswith(".txt")
+                                    ) and path.endswith(".txt"):
+                                        with open(path, encoding="utf-8") as f:
+                                            raw = f.read()
+                                        st.text_area(
+                                            f"{ak} {_format_chars_and_size(raw)}",
+                                            value=raw,
+                                            height=400,
+                                            disabled=True,
+                                            key=f"art_{ak}_{trc_view.get('trc_id')}_{result.trc_id}",
+                                        )
+                                    elif path.endswith(".json"):
+                                        with open(path, encoding="utf-8") as f:
+                                            data = json.loads(f.read())
+                                        if ak == "text_enhancement_diffs":
+                                            text_enhancement_diffs_data = data
+                                        else:
+                                            st.json(data)
+                                except Exception:
+                                    st.caption(f"{ak}: (unavailable)")
 
                     # Display text enhancement diffs full-width if present
                     if text_enhancement_diffs_data and stage == "text_enhancement":
@@ -683,18 +683,17 @@ def page_library() -> None:
                 st.text_input("Title", key=edit_title_key)
                 st.text_area("Master Summary", height=200, key=edit_ms_key)
 
-                changed = (
-                    st.session_state.get(edit_title_key, '') != inc.get('title', '') or
-                    st.session_state.get(edit_ms_key, '') != inc.get('master_summary', '')
-                )
+                changed = st.session_state.get(edit_title_key, "") != inc.get(
+                    "title", ""
+                ) or st.session_state.get(edit_ms_key, "") != inc.get("master_summary", "")
                 if changed:
                     col1, col2 = st.columns([6, 1])
                     with col2:
                         save_col, revert_col = st.columns(2)
                         with save_col:
                             if st.button("Save Changes", key=f"save_inc_{inc['incident_id']}"):
-                                inc['title'] = st.session_state[edit_title_key]
-                                inc['master_summary'] = st.session_state[edit_ms_key]
+                                inc["title"] = st.session_state[edit_title_key]
+                                inc["master_summary"] = st.session_state[edit_ms_key]
                                 inc_path = INCIDENTS_DIR / f"{inc['incident_id']}.json"
                                 inc_path.write_text(json.dumps(inc, indent=2))
                                 st.success("Saved")
@@ -717,236 +716,243 @@ def page_library() -> None:
                 for _idx, (trc_tab, trc) in enumerate(zip(trc_tabs, trcs_sorted, strict=False)):
                     with trc_tab:
                         # TRC details
-                        st.subheader("Pipeline Details")
-                        stage_tabs = st.tabs(
-                            [
-                                "transcription_parsing",
-                                "text_enhancement",
-                                "noise_reduction",
-                                "participant_analysis",
-                                "summarisation",
-                                "keyword_extraction",
-                                "master_summary_synthesis",
-                            ]
-                        )
+                        with st.expander("Pipeline Details", expanded=False):
+                            stage_tabs = st.tabs(
+                                [
+                                    "transcription_parsing",
+                                    "text_enhancement",
+                                    "noise_reduction",
+                                    "participant_analysis",
+                                    "summarisation",
+                                    "keyword_extraction",
+                                    "master_summary_synthesis",
+                                ]
+                            )
 
-                        # Helper mapping for stage inputs
-                        input_key_map = {
-                            "transcription_parsing": "raw_vtt",
-                            "text_enhancement": "transcription_parsing",
-                            "noise_reduction": "text_enhancement",
-                            "participant_analysis": "noise_reduction",
-                            "summarisation": "noise_reduction",
-                            "keyword_extraction": "noise_reduction",
-                        }
+                            # Helper mapping for stage inputs
+                            input_key_map = {
+                                "transcription_parsing": "raw_vtt",
+                                "text_enhancement": "transcription_parsing",
+                                "noise_reduction": "text_enhancement",
+                                "participant_analysis": "noise_reduction",
+                                "summarisation": "noise_reduction",
+                                "keyword_extraction": "noise_reduction",
+                            }
 
-                        for _s, tab_stage in enumerate(
-                            [
-                                "transcription_parsing",
-                                "text_enhancement",
-                                "noise_reduction",
-                                "participant_analysis",
-                                "summarisation",
-                                "keyword_extraction",
-                                "master_summary_synthesis",
-                            ]
-                        ):
-                            with stage_tabs[_s]:
-                                in_col, out_col = st.columns(2)
-                                text_enhancement_diffs_data = None
+                            for _s, tab_stage in enumerate(
+                                [
+                                    "transcription_parsing",
+                                    "text_enhancement",
+                                    "noise_reduction",
+                                    "participant_analysis",
+                                    "summarisation",
+                                    "keyword_extraction",
+                                    "master_summary_synthesis",
+                                ]
+                            ):
+                                with stage_tabs[_s]:
+                                    in_col, out_col = st.columns(2)
+                                    text_enhancement_diffs_data = None
 
-                                # Inputs
-                                with in_col:
-                                    st.markdown("**Inputs**")
-                                    if tab_stage == "master_summary_synthesis":
-                                        summaries = [
-                                            t.get("pipeline_outputs", {}).get("summarisation", "")
-                                            for t in inc.get("trcs", [])
-                                        ]
-                                        agg = "\n\n".join([s for s in summaries if s])
-                                        label_ms_in = (
-                                            f"summarisation (all TRCs) {_format_chars_and_size(agg)}"  # noqa: E501
-                                        )
-                                        st.text_area(
-                                            label_ms_in,
-                                            value=agg,
-                                            height=400,
-                                            disabled=True,
-                                            key=f"lib_in_ms_agg_{inc['incident_id']}_{trc['trc_id']}",
-                                        )
-                                    else:
-                                        key = input_key_map.get(tab_stage)
-                                        if key:
-                                            val = trc.get("pipeline_outputs", {}).get(key, "")
-                                            if isinstance(val, (dict, list)):
-                                                st.json(val)
-                                            else:
-                                                label = f"{key} {_format_chars_and_size(val or '')}"
-                                                st.text_area(
-                                                    label,
-                                                    value=val or "",
-                                                    height=400,
-                                                    disabled=True,
-                                                    key=f"lib_in_{tab_stage}_{key}_{inc['incident_id']}_{trc['trc_id']}",
+                                    # Inputs
+                                    with in_col:
+                                        st.markdown("**Inputs**")
+                                        if tab_stage == "master_summary_synthesis":
+                                            summaries = [
+                                                t.get("pipeline_outputs", {}).get(
+                                                    "summarisation", ""
                                                 )
-
-                                # Outputs
-                                with out_col:
-                                    st.markdown("**Outputs**")
-                                    if tab_stage == "master_summary_synthesis":
-                                        ms_text = inc.get("master_summary", "")
-                                        st.text_area(
-                                            f"master_summary {_format_chars_and_size(ms_text)}",
-                                            value=ms_text,
-                                            height=400,
-                                            disabled=True,
-                                            key=f"lib_out_ms_{inc['incident_id']}_{trc['trc_id']}_ms",
-                                        )
-                                        inc_art = inc.get("pipeline_artifacts", {}) or {}
-                                        ms_art = inc_art.get("master_summary_raw_llm_output")
-                                        if ms_art:
-                                            try:
-                                                with open(ms_art, encoding="utf-8") as f:
-                                                    raw = f.read()
-                                                label_ms_raw = (
-                                                    "master_summary_raw_llm_output "
-                                                    f"{_format_chars_and_size(raw)}"
-                                                )
-                                                st.text_area(
-                                                    label_ms_raw,
-                                                    value=raw,
-                                                    height=400,
-                                                    disabled=True,
-                                                    key=f"lib_ms_raw_{inc['incident_id']}_{trc['trc_id']}_raw",
-                                                )
-                                            except Exception:
-                                                st.caption(
-                                                    "master_summary_raw_llm_output: (unavailable)"
-                                                )
-                                    else:
-                                        po = trc.get("pipeline_outputs", {})
-                                        out_key = None
-                                        if tab_stage in (
-                                            "transcription_parsing",
-                                            "text_enhancement",
-                                            "noise_reduction",
-                                            "summarisation",
-                                        ):
-                                            out_key = (
-                                                tab_stage
-                                                if tab_stage != "summarisation"
-                                                else "summarisation"
-                                            )
-                                        elif tab_stage == "participant_analysis":
-                                            out_key = "participant_analysis"
-                                        elif tab_stage == "keyword_extraction":
-                                            out_key = "keywords"
-                                        if out_key and out_key in po:
-                                            val = po[out_key]
-                                            if isinstance(val, (dict, list)):
-                                                st.json(val)
-                                            else:
-                                                st.text_area(
-                                                    f"{out_key} {_format_chars_and_size(val or '')}",  # noqa: E501
-                                                    value=val or "",
-                                                    height=400,
-                                                    disabled=True,
-                                                    key=f"lib_out_{out_key}_{inc['incident_id']}_{trc['trc_id']}",
-                                                )
-                                        arts = trc.get("pipeline_artifacts", {}) or {}
-                                        artifact_keys: list[str] = []
-                                        if tab_stage == "summarisation":
-                                            artifact_keys = ["summarisation_llm_output"]
-                                        elif tab_stage == "participant_analysis":
-                                            artifact_keys = [
-                                                "participant_analysis_llm_output",
-                                                "participant_analysis_llm_output_raw",
+                                                for t in inc.get("trcs", [])
                                             ]
-                                        elif tab_stage == "text_enhancement":
-                                            artifact_keys = ["text_enhancement_diffs"]
-                                        for ak in artifact_keys:
-                                            path = arts.get(ak)
-                                            if not path:
-                                                continue
-                                            try:
-                                                if (
-                                                    ak.endswith("_raw")
-                                                    or ak.endswith("_llm_output")
-                                                    and path.endswith(".txt")
-                                                ) and path.endswith(".txt"):
-                                                    with open(path, encoding="utf-8") as f:
-                                                        raw = f.read()
+                                            agg = "\n\n".join([s for s in summaries if s])
+                                            label_ms_in = f"summarisation (all TRCs) {_format_chars_and_size(agg)}"  # noqa: E501
+                                            st.text_area(
+                                                label_ms_in,
+                                                value=agg,
+                                                height=400,
+                                                disabled=True,
+                                                key=f"lib_in_ms_agg_{inc['incident_id']}_{trc['trc_id']}",
+                                            )
+                                        else:
+                                            key = input_key_map.get(tab_stage)
+                                            if key:
+                                                val = trc.get("pipeline_outputs", {}).get(key, "")
+                                                if isinstance(val, (dict, list)):
+                                                    st.json(val)
+                                                else:
+                                                    label = (
+                                                        f"{key} {_format_chars_and_size(val or '')}"
+                                                    )
                                                     st.text_area(
-                                                        f"{ak} {_format_chars_and_size(raw)}",
+                                                        label,
+                                                        value=val or "",
+                                                        height=400,
+                                                        disabled=True,
+                                                        key=f"lib_in_{tab_stage}_{key}_{inc['incident_id']}_{trc['trc_id']}",
+                                                    )
+
+                                    # Outputs
+                                    with out_col:
+                                        st.markdown("**Outputs**")
+                                        if tab_stage == "master_summary_synthesis":
+                                            ms_text = inc.get("master_summary", "")
+                                            st.text_area(
+                                                f"master_summary {_format_chars_and_size(ms_text)}",
+                                                value=ms_text,
+                                                height=400,
+                                                disabled=True,
+                                                key=f"lib_out_ms_{inc['incident_id']}_{trc['trc_id']}_ms",
+                                            )
+                                            inc_art = inc.get("pipeline_artifacts", {}) or {}
+                                            ms_art = inc_art.get("master_summary_raw_llm_output")
+                                            if ms_art:
+                                                try:
+                                                    with open(ms_art, encoding="utf-8") as f:
+                                                        raw = f.read()
+                                                    label_ms_raw = (
+                                                        "master_summary_raw_llm_output "
+                                                        f"{_format_chars_and_size(raw)}"
+                                                    )
+                                                    st.text_area(
+                                                        label_ms_raw,
                                                         value=raw,
                                                         height=400,
                                                         disabled=True,
-                                                        key=f"lib_art_{ak}_{inc['incident_id']}_{trc['trc_id']}",
+                                                        key=f"lib_ms_raw_{inc['incident_id']}_{trc['trc_id']}_raw",
                                                     )
-                                                elif path.endswith(".json"):
-                                                    with open(path, encoding="utf-8") as f:
-                                                        data = json.loads(f.read())
-                                                    if ak == "text_enhancement_diffs":
-                                                        text_enhancement_diffs_data = data
-                                                    else:
-                                                        st.json(data)
-                                            except Exception:
-                                                st.caption(f"{ak}: (unavailable)")
+                                                except Exception:
+                                                    st.caption(
+                                                        "master_summary_raw_llm_output: (unavailable)"
+                                                    )
+                                        else:
+                                            po = trc.get("pipeline_outputs", {})
+                                            out_key = None
+                                            if tab_stage in (
+                                                "transcription_parsing",
+                                                "text_enhancement",
+                                                "noise_reduction",
+                                                "summarisation",
+                                            ):
+                                                out_key = (
+                                                    tab_stage
+                                                    if tab_stage != "summarisation"
+                                                    else "summarisation"
+                                                )
+                                            elif tab_stage == "participant_analysis":
+                                                out_key = "participant_analysis"
+                                            elif tab_stage == "keyword_extraction":
+                                                out_key = "keywords"
+                                            if out_key and out_key in po:
+                                                val = po[out_key]
+                                                if isinstance(val, (dict, list)):
+                                                    st.json(val)
+                                                else:
+                                                    st.text_area(
+                                                        f"{out_key} {_format_chars_and_size(val or '')}",  # noqa: E501
+                                                        value=val or "",
+                                                        height=400,
+                                                        disabled=True,
+                                                        key=f"lib_out_{out_key}_{inc['incident_id']}_{trc['trc_id']}",
+                                                    )
+                                            arts = trc.get("pipeline_artifacts", {}) or {}
+                                            artifact_keys: list[str] = []
+                                            if tab_stage == "summarisation":
+                                                artifact_keys = ["summarisation_llm_output"]
+                                            elif tab_stage == "participant_analysis":
+                                                artifact_keys = [
+                                                    "participant_analysis_llm_output",
+                                                    "participant_analysis_llm_output_raw",
+                                                ]
+                                            elif tab_stage == "text_enhancement":
+                                                artifact_keys = ["text_enhancement_diffs"]
+                                            for ak in artifact_keys:
+                                                path = arts.get(ak)
+                                                if not path:
+                                                    continue
+                                                try:
+                                                    if (
+                                                        ak.endswith("_raw")
+                                                        or ak.endswith("_llm_output")
+                                                        and path.endswith(".txt")
+                                                    ) and path.endswith(".txt"):
+                                                        with open(path, encoding="utf-8") as f:
+                                                            raw = f.read()
+                                                        st.text_area(
+                                                            f"{ak} {_format_chars_and_size(raw)}",
+                                                            value=raw,
+                                                            height=400,
+                                                            disabled=True,
+                                                            key=f"lib_art_{ak}_{inc['incident_id']}_{trc['trc_id']}",
+                                                        )
+                                                    elif path.endswith(".json"):
+                                                        with open(path, encoding="utf-8") as f:
+                                                            data = json.loads(f.read())
+                                                        if ak == "text_enhancement_diffs":
+                                                            text_enhancement_diffs_data = data
+                                                        else:
+                                                            st.json(data)
+                                                except Exception:
+                                                    st.caption(f"{ak}: (unavailable)")
 
-                                # Display text enhancement diffs full-width if present
-                                if text_enhancement_diffs_data and tab_stage == "text_enhancement":
-                                    total_reps = text_enhancement_diffs_data.get(
-                                        "total_replacements", 0
+                                    # Display text enhancement diffs full-width if present
+                                    if (
+                                        text_enhancement_diffs_data
+                                        and tab_stage == "text_enhancement"
+                                    ):
+                                        total_reps = text_enhancement_diffs_data.get(
+                                            "total_replacements", 0
+                                        )
+                                        changes = text_enhancement_diffs_data.get("changes", [])
+                                        if changes:
+                                            st.markdown(f"**{total_reps} Replacements:**")
+                                            for i, change in enumerate(changes):
+                                                hhmm = change.get("hhmm", "N/A")
+                                                speaker = change.get("speaker", "N/A")
+                                                title = f"Change {i + 1}: {hhmm} - {speaker}"  # noqa: E501
+                                                with st.expander(title, expanded=False):
+                                                    old_text = change.get("old_dialogue", "")
+                                                    new_text = change.get("new_dialogue", "")
+                                                    diff_viewer(
+                                                        old_text=old_text, new_text=new_text
+                                                    )
+                                        elif not changes:
+                                            st.caption("No changes recorded")
+
+                            # Rerun controls
+                            st.divider()
+                            start_from = st.selectbox(
+                                "Rerun pipeline from:",
+                                options=[
+                                    "Start",
+                                    "transcription_parsing",
+                                    "text_enhancement",
+                                    "noise_reduction",
+                                    "participant_analysis",
+                                    "summarisation",
+                                    "keyword_extraction",
+                                ],
+                                key=f"rerun_from_{inc['incident_id']}_{trc['trc_id']}",
+                            )
+                            if st.button("Go", key=f"rerun_{inc['incident_id']}_{trc['trc_id']}"):
+                                start_stage = None if start_from == "Start" else start_from
+                                raw_vtt = trc.get("pipeline_outputs", {}).get("raw_vtt", "")
+                                inc_id_val = inc.get("incident_id")
+                                start_time = trc.get("start_time")
+                                if not inc_id_val or not start_time:
+                                    st.error(
+                                        "Missing incident_id or start_time for this TRC; cannot rerun."
                                     )
-                                    changes = text_enhancement_diffs_data.get("changes", [])
-                                    if changes:
-                                        st.markdown(f"**{total_reps} Replacements:**")
-                                        for i, change in enumerate(changes):
-                                            hhmm = change.get("hhmm", "N/A")
-                                            speaker = change.get("speaker", "N/A")
-                                            title = f"Change {i + 1}: {hhmm} - {speaker}"  # noqa: E501
-                                            with st.expander(title, expanded=False):
-                                                old_text = change.get("old_dialogue", "")
-                                                new_text = change.get("new_dialogue", "")
-                                                diff_viewer(old_text=old_text, new_text=new_text)
-                                    elif not changes:
-                                        st.caption("No changes recorded")
-
-                        # Rerun controls
-                        st.divider()
-                        start_from = st.selectbox(
-                            "Rerun pipeline from:",
-                            options=[
-                                "Start",
-                                "transcription_parsing",
-                                "text_enhancement",
-                                "noise_reduction",
-                                "participant_analysis",
-                                "summarisation",
-                                "keyword_extraction",
-                            ],
-                            key=f"rerun_from_{inc['incident_id']}_{trc['trc_id']}",
-                        )
-                        if st.button("Go", key=f"rerun_{inc['incident_id']}_{trc['trc_id']}"):
-                            start_stage = None if start_from == "Start" else start_from
-                            raw_vtt = trc.get("pipeline_outputs", {}).get("raw_vtt", "")
-                            inc_id_val = inc.get("incident_id")
-                            start_time = trc.get("start_time")
-                            if not inc_id_val or not start_time:
-                                st.error(
-                                    "Missing incident_id or start_time for this TRC; cannot rerun."
-                                )
-                            else:
-                                result = process_pipeline(
-                                    raw_vtt,
-                                    inc_id_val,
-                                    start_time,
-                                    start_stage=start_stage,
-                                )
-                                if result.success:
-                                    st.success("Re-run completed")
                                 else:
-                                    st.error(f"Re-run failed at stage {result.failed_stage}")
+                                    result = process_pipeline(
+                                        raw_vtt,
+                                        inc_id_val,
+                                        start_time,
+                                        start_stage=start_stage,
+                                    )
+                                    if result.success:
+                                        st.success("Re-run completed")
+                                    else:
+                                        st.error(f"Re-run failed at stage {result.failed_stage}")
 
 
 def page_people() -> None:
@@ -1237,6 +1243,7 @@ def page_config() -> None:
                         with contextlib.suppress(Exception):
                             if p.is_dir():
                                 import shutil
+
                                 shutil.rmtree(p, ignore_errors=True)
                             else:
                                 p.unlink(missing_ok=True)  # type: ignore[arg-type]
@@ -1289,6 +1296,7 @@ def page_config() -> None:
                             art_dir = DATA_DIR / "artifacts" / sel_inc / sel_trc
                             if art_dir.exists():
                                 import shutil
+
                                 shutil.rmtree(art_dir, ignore_errors=True)
                             # Remove original upload file if present
                             for t in trcs:
@@ -1317,11 +1325,13 @@ def page_config() -> None:
                     inc_art_dir = DATA_DIR / "artifacts" / sel_inc
                     if inc_art_dir.exists():
                         import shutil
+
                         shutil.rmtree(inc_art_dir, ignore_errors=True)
                     # Delete uploads dir
                     inc_uploads_dir = DATA_DIR / "uploads" / sel_inc
                     if inc_uploads_dir.exists():
                         import shutil
+
                         shutil.rmtree(inc_uploads_dir, ignore_errors=True)
                     st.success(f"Deleted incident: {sel_inc}")
                     st.rerun()
