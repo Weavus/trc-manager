@@ -67,7 +67,7 @@ class TranscriptionParsingStage:
         current_total_rollover_offset = timedelta(0)
 
         for seg in raw_segments:
-            speaker = self._normalize_speaker_name(seg.get("raw_speaker", "") or "Unknown Speaker")
+            speaker = self.generate_display_name(seg.get("raw_speaker", "") or "Unknown Speaker")
             dialogue = seg.get("raw_dialogue", "")
 
             if flat_replacements:
@@ -187,12 +187,51 @@ class TranscriptionParsingStage:
             logger.warning("Could not parse VTT timestamp string to timedelta: %r", ts_str)
             return None
 
-    def _normalize_speaker_name(self, name: str) -> str:
-        name = (name or "").strip()
-        if not name:
-            return "Unknown Speaker"
-        name = re.sub(r"\s+", " ", name)
-        return name.strip()
+    @staticmethod
+    def generate_display_name(
+        raw_name: str
+    ) -> str:
+        """
+        Generates a display-friendly name from a raw name string.
+        - Reverses "Lastname, Firstnames" format.
+        - Removes common parenthetical suffixes (e.g., "(External)", "(Guest)").
+        - Shortens names with more than two parts (e.g., First Middle Last -> First Last).
+        - Applies Title Case (e.g., "BOB ross" -> "Bob Ross").
+        - Standardizes spacing and trims whitespace.
+        """
+
+        if not raw_name:
+            return ""
+
+        name_to_process = raw_name
+
+        if name_to_process == "@1":
+            name_to_process = "Unknown Speaker"
+
+        name_to_process = re.sub(r'\s*\([^)]*\)$', '', name_to_process).strip()
+
+        if ',' in name_to_process:
+            parts = [part.strip() for part in name_to_process.split(',', 1)]
+            if len(parts) == 2:
+                name_to_process = f"{parts[1]} {parts[0]}"
+
+        words_for_structure = name_to_process.strip().split()
+        if not words_for_structure:
+            return ""
+        name_to_process_standard_space = ' '.join(words_for_structure)
+
+        name_parts_structured = name_to_process_standard_space.split()
+        if len(name_parts_structured) > 2:
+            processed_name = f"{name_parts_structured[0]} {name_parts_structured[-1]}"
+        else:
+            processed_name = name_to_process_standard_space
+
+        words_final = processed_name.strip().split()
+        if not words_final:
+            return ""
+        final_display_name = ' '.join(words_final).title()
+
+        return final_display_name.strip()
 
     def _extract_vtt_cue_info(self, line: str) -> tuple[str, str] | None:
         match = self._vtt_timestamp_cue_pattern.match(line)
