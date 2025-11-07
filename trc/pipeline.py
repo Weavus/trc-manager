@@ -95,17 +95,13 @@ def setup_logging(log_path: Path = Path("app.log"), level: str = "INFO") -> None
     llm_logger = logging.getLogger("trc.llm")
     llm_logger.setLevel(logging.DEBUG)
 
-    # Add a filter to the console handler to allow DEBUG messages from LLM logger
-    class LLMDebugFilter(logging.Filter):
-        def filter(self, record):
-            return record.name.startswith("trc.llm") and record.levelno >= logging.DEBUG
-
-    console_handler.addFilter(LLMDebugFilter())
-    console_handler.setLevel(logging.DEBUG)  # Allow DEBUG through the filter
-
-    # Ensure LLM logger logs to file as well
+    # Create a separate console handler for LLM debug messages
+    llm_console_handler = logging.StreamHandler()
+    llm_console_handler.setLevel(logging.DEBUG)
+    llm_console_handler.setFormatter(console_formatter)
+    llm_logger.addHandler(llm_console_handler)
     llm_logger.addHandler(file_handler)
-    # Keep propagate=True so messages go to root logger handlers with filter
+    llm_logger.propagate = False  # Don't send to root logger
 
     if level.upper() == "DEBUG":
         # Enable debug logging for pipeline stages
@@ -114,6 +110,9 @@ def setup_logging(log_path: Path = Path("app.log"), level: str = "INFO") -> None
     # Log the setup
     logger = logging.getLogger("trc.pipeline")
     logger.info(f"Logging initialized at level {level} to {log_path}")
+    llm_logger = logging.getLogger("trc.llm")
+    logger.info(f"LLM logger configured: level={llm_logger.level}, "
+                f"propagate={llm_logger.propagate}, handlers={len(llm_logger.handlers)}")
 
 
 # Helpers
