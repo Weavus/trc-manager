@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import contextlib
 import json
 from datetime import datetime
-from typing import Any
 from pathlib import Path
+from typing import Any
 
 import streamlit as st
 
@@ -14,12 +15,10 @@ from trc.pipeline import (
     PEOPLE_PATH,
     list_incidents,
     load_people_directory,
+    parse_filename as parse_filename_info,
     process_pipeline,
     save_people_directory,
     setup_logging,
-)
-from trc.pipeline import (
-    parse_filename as parse_filename_info,
 )
 
 
@@ -303,7 +302,7 @@ def page_upload() -> None:
                                 disabled=True,
                                 key=f"out_ms_{inc_id}_{result.trc_id}",
                             )
-                            out_text += (ms_text or "")
+                            out_text += ms_text or ""
 
                             # Incident-level artifacts
                             inc_art = inc_view.get("pipeline_artifacts", {}) or {}
@@ -323,7 +322,7 @@ def page_upload() -> None:
                                         disabled=True,
                                         key=f"ms_raw_{inc_id}_{result.trc_id}",
                                     )
-                                    out_text += ("\n\n" + (raw or ""))
+                                    out_text += "\n\n" + (raw or "")
                                 except Exception:
                                     st.caption("master_summary_raw_llm_output: (unavailable)")
                         else:
@@ -350,7 +349,7 @@ def page_upload() -> None:
                                         disabled=True,
                                         key=f"out_{out_key}_{trc_view.get('trc_id')}_{result.trc_id}",
                                     )
-                                    out_text += (val or "")
+                                    out_text += val or ""
 
                             # Show stage artifacts if present
                             arts = trc_view.get("pipeline_artifacts", {}) or {}
@@ -379,12 +378,12 @@ def page_upload() -> None:
                                             disabled=True,
                                             key=f"art_{ak}_{trc_view.get('trc_id')}_{result.trc_id}",
                                         )
-                                        out_text += ("\n\n" + (raw or ""))
+                                        out_text += "\n\n" + (raw or "")
                                     elif path.endswith(".json"):
                                         with open(path, encoding="utf-8") as f:
                                             data = json.loads(f.read())
                                         st.json(data)
-                                        out_text += ("\n\n" + json.dumps(data, indent=2))
+                                        out_text += "\n\n" + json.dumps(data, indent=2)
                                 except Exception:
                                     st.caption(f"{ak}: (unavailable)")
                         with hoc2:
@@ -545,14 +544,16 @@ def page_library() -> None:
             tabs = st.tabs(tab_labels)
             for _idx, (tab, trc) in enumerate(zip(tabs, trcs, strict=False)):
                 with tab:
-                    stage_tabs = st.tabs([
-                        "cleanup",
-                        "refinement",
-                        "people_extraction",
-                        "summarisation",
-                        "keyword_extraction",
-                        "master_summary",
-                    ])
+                    stage_tabs = st.tabs(
+                        [
+                            "cleanup",
+                            "refinement",
+                            "people_extraction",
+                            "summarisation",
+                            "keyword_extraction",
+                            "master_summary",
+                        ]
+                    )
 
                     # Helper mapping for stage inputs
                     input_key_map = {
@@ -564,14 +565,16 @@ def page_library() -> None:
                         "master_summary": "summarisation",
                     }
 
-                    for _s, tab_stage in enumerate([
-                        "cleanup",
-                        "refinement",
-                        "people_extraction",
-                        "summarisation",
-                        "keyword_extraction",
-                        "master_summary",
-                    ]):
+                    for _s, tab_stage in enumerate(
+                        [
+                            "cleanup",
+                            "refinement",
+                            "people_extraction",
+                            "summarisation",
+                            "keyword_extraction",
+                            "master_summary",
+                        ]
+                    ):
                         with stage_tabs[_s]:
                             in_col, out_col = st.columns(2)
 
@@ -589,8 +592,7 @@ def page_library() -> None:
                                     agg = "\n\n".join([s for s in summaries if s])
                                     input_text = agg
                                     label_ms_in = (
-                                        "summarisation (all TRCs) "
-                                        f"{_format_chars_and_size(agg)}"
+                                        f"summarisation (all TRCs) {_format_chars_and_size(agg)}"
                                     )
                                     st.text_area(
                                         label_ms_in,
@@ -639,7 +641,7 @@ def page_library() -> None:
                                         disabled=True,
                                         key=f"lib_out_ms_{inc['incident_id']}_{trc['trc_id']}",
                                     )
-                                    out_text += (ms_text or "")
+                                    out_text += ms_text or ""
                                     inc_art = inc.get("pipeline_artifacts", {}) or {}
                                     ms_art = inc_art.get("master_summary_raw_llm_output")
                                     if ms_art:
@@ -657,7 +659,7 @@ def page_library() -> None:
                                                 disabled=True,
                                                 key=f"lib_ms_raw_{inc['incident_id']}_{trc['trc_id']}",
                                             )
-                                            out_text += ("\n\n" + (raw or ""))
+                                            out_text += "\n\n" + (raw or "")
                                         except Exception:
                                             st.caption(
                                                 "master_summary_raw_llm_output: (unavailable)"
@@ -692,7 +694,7 @@ def page_library() -> None:
                                                 disabled=True,
                                                 key=f"lib_out_{out_key}_{trc['trc_id']}",
                                             )
-                                            out_text += (val or "")
+                                            out_text += val or ""
                                     arts = trc.get("pipeline_artifacts", {}) or {}
                                     artifact_keys: list[str] = []
                                     if tab_stage == "summarisation":
@@ -708,8 +710,7 @@ def page_library() -> None:
                                             continue
                                         try:
                                             if (
-                                                ak.endswith("_raw")
-                                                or ak.endswith("_llm_output")
+                                                ak.endswith("_raw") or ak.endswith("_llm_output")
                                             ) and path.endswith(".txt"):
                                                 with open(path, encoding="utf-8") as f:
                                                     raw = f.read()
@@ -720,14 +721,12 @@ def page_library() -> None:
                                                     disabled=True,
                                                     key=f"lib_art_{ak}_{trc['trc_id']}",
                                                 )
-                                                out_text += ("\n\n" + (raw or ""))
+                                                out_text += "\n\n" + (raw or "")
                                             elif path.endswith(".json"):
                                                 with open(path, encoding="utf-8") as f:
                                                     data = json.loads(f.read())
                                                 st.json(data)
-                                                out_text += (
-                                                    "\n\n" + json.dumps(data, indent=2)
-                                                )
+                                                out_text += "\n\n" + json.dumps(data, indent=2)
                                         except Exception:
                                             st.caption(f"{ak}: (unavailable)")
                                 with oh2:
@@ -754,16 +753,24 @@ def page_library() -> None:
                     )
                     if st.button("Go", key=f"rerun_{trc['trc_id']}"):
                         start_stage = None if start_from == "Start" else start_from
-                        result = process_pipeline(
-                            trc.get("pipeline_outputs", {}).get("raw_vtt", ""),
-                            inc.get("incident_id"),
-                            trc.get("start_time"),
-                            start_stage=start_stage,
-                        )
-                        if result.success:
-                            st.success("Re-run completed")
+                        raw_vtt = trc.get("pipeline_outputs", {}).get("raw_vtt", "")
+                        inc_id_val = inc.get("incident_id")
+                        start_time = trc.get("start_time")
+                        if not inc_id_val or not start_time:
+                            st.error(
+                                "Missing incident_id or start_time for this TRC; cannot rerun."
+                            )
                         else:
-                            st.error(f"Re-run failed at stage {result.failed_stage}")
+                            result = process_pipeline(
+                                raw_vtt,
+                                inc_id_val,
+                                start_time,
+                                start_stage=start_stage,
+                            )
+                            if result.success:
+                                st.success("Re-run completed")
+                            else:
+                                st.error(f"Re-run failed at stage {result.failed_stage}")
 
 
 def page_people() -> None:
@@ -775,7 +782,7 @@ def page_people() -> None:
             r.get("role")
             for p in directory.values()
             for r in p.get("discovered_roles", [])
-            if r.get("role")
+            if isinstance(r.get("role"), str)
         }
     )
     skills_set = sorted(
@@ -783,7 +790,7 @@ def page_people() -> None:
             k.get("knowledge")
             for p in directory.values()
             for k in p.get("discovered_knowledge", [])
-            if k.get("knowledge")
+            if isinstance(k.get("knowledge"), str)
         }
     )
 
@@ -977,8 +984,17 @@ def page_config() -> None:
             options=["(select)"] + people_names,
             key="delete_person_select",
         )
-        if del_person != "(select)" and st.button("Delete Person") and st.checkbox(
-            f"Confirm delete person '{del_person}'", key=f"confirm_del_person_{del_person}"
+        delete_person_disabled = del_person == "(select)"
+        if (
+            st.button(
+                "Delete Person",
+                disabled=delete_person_disabled,
+                key="btn_delete_person",
+            )
+            and not delete_person_disabled
+            and st.checkbox(
+                f"Confirm delete person '{del_person}'", key=f"confirm_del_person_{del_person}"
+            )
         ):
             people_dir.pop(del_person, None)
             save_people_directory(people_dir)
@@ -997,24 +1013,21 @@ def page_config() -> None:
     ):
         # Remove incident JSONs
         for f in INCIDENTS_DIR.glob("*.json"):
-            try:
+            with contextlib.suppress(Exception):
                 f.unlink()
-            except Exception:
-                pass
         # Remove artifacts + uploads directories
         artifacts_root = DATA_DIR / "artifacts"
         uploads_root = DATA_DIR / "uploads"
         for root in [artifacts_root, uploads_root]:
             if root.exists():
                 for p in root.glob("*"):
-                    try:
+                    with contextlib.suppress(Exception):
                         if p.is_dir():
                             import shutil
+
                             shutil.rmtree(p, ignore_errors=True)
                         else:
                             p.unlink(missing_ok=True)  # type: ignore[arg-type]
-                    except Exception:
-                        pass
         st.success("All incidents/TRCs removed")
         st.rerun()
 
@@ -1037,8 +1050,17 @@ def page_config() -> None:
             )
             c1, c2 = st.columns(2)
             with c1:
-                if st.button("Delete Selected TRC") and sel_trc != "(none)" and st.checkbox(
-                    f"Confirm delete TRC '{sel_trc}'", key=f"confirm_del_trc_{sel_trc}"
+                delete_trc_disabled = sel_trc == "(none)"
+                if (
+                    st.button(
+                        "Delete Selected TRC",
+                        disabled=delete_trc_disabled,
+                        key=f"btn_delete_trc_{sel_inc}",
+                    )
+                    and not delete_trc_disabled
+                    and st.checkbox(
+                        f"Confirm delete TRC '{sel_trc}'", key=f"confirm_del_trc_{sel_trc}"
+                    )
                 ):
                     # Remove TRC entry
                     new_trcs = [t for t in trcs if t.get("trc_id") != sel_trc]
@@ -1048,16 +1070,15 @@ def page_config() -> None:
                     art_dir = DATA_DIR / "artifacts" / sel_inc / sel_trc
                     if art_dir.exists():
                         import shutil
+
                         shutil.rmtree(art_dir, ignore_errors=True)
                     # Remove original upload file if present
                     for t in trcs:
                         if t.get("trc_id") == sel_trc:
                             orig_fp = t.get("original_filepath")
                             if orig_fp:
-                                try:
-                                    Path(orig_fp).unlink(missing_ok=True)  # type: ignore[arg-type]
-                                except Exception:
-                                    pass
+                                with contextlib.suppress(Exception):
+                                    Path(orig_fp).unlink(missing_ok=True)
                             break
                     st.success(f"Deleted TRC: {sel_trc}")
                     st.rerun()
@@ -1067,26 +1088,22 @@ def page_config() -> None:
                     key=f"confirm_del_inc_{sel_inc}",
                 ):
                     # Delete incident file
-                    try:
+                    with contextlib.suppress(Exception):
                         inc_path.unlink()
-                    except Exception:
-                        pass
                     # Delete incident-level artifacts dir
                     inc_art_dir = DATA_DIR / "artifacts" / sel_inc
                     if inc_art_dir.exists():
                         import shutil
+
                         shutil.rmtree(inc_art_dir, ignore_errors=True)
                     # Delete uploads dir
                     inc_uploads_dir = DATA_DIR / "uploads" / sel_inc
                     if inc_uploads_dir.exists():
                         import shutil
+
                         shutil.rmtree(inc_uploads_dir, ignore_errors=True)
                     st.success(f"Deleted incident: {sel_inc}")
                     st.rerun()
-
-    if st.button("Save Configuration"):
-        CONFIG_PATH.write_text(json.dumps(cfg, indent=2))
-        st.success("Configuration saved")
 
     if st.button("Save Configuration"):
         CONFIG_PATH.write_text(json.dumps(cfg, indent=2))
