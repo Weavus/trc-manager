@@ -1873,41 +1873,33 @@ def display_person_card(person, directory):
     ))
 
     # Create complete card as HTML to avoid Streamlit component rendering issues
-    role_text = f'<p style="margin: 0.25rem 0; color: #6c757d; font-size: 0.9rem;"><strong>Role:</strong> {role_override}</p>' if role_override else ''
+    role_html = f'<p style="margin: 0.25rem 0; color: #6c757d; font-size: 0.9rem;"><strong>Role:</strong> {role_override}</p>' if role_override else ''
 
-    card_html = f"""
-    <div style="
-        border: 1px solid #e9ecef;
-        border-radius: 10px;
-        padding: 1.5rem;
-        margin: 0.5rem 0;
-        background-color: white;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    ">
-        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem;">
-            <div>
-                <h3 style="margin: 0 0 0.5rem 0; color: #495057; font-size: 1.25rem;">{display_name}</h3>
-                {role_text}
-            </div>
-            <div style="text-align: right; color: #6c757d; font-size: 0.8rem;">
-                📊 {total_incidents} incident{'s' if total_incidents != 1 else ''}
-            </div>
-        </div>
+    incidents_text = f"{total_incidents} incident{'s' if total_incidents != 1 else ''}"
 
-        <div style="display: flex; gap: 1rem; margin-bottom: 1rem;">
-            <div style="flex: 1; text-align: center; padding: 1rem; background-color: #f8f9fa; border-radius: 8px;">
-                <div style="font-size: 1.5rem;">👔</div>
-                <div style="font-size: 0.9rem; color: #6c757d; margin: 0.25rem 0;">Roles</div>
-                <div style="font-size: 1.5rem; font-weight: bold; color: #007bff;">{roles_count}</div>
-            </div>
-            <div style="flex: 1; text-align: center; padding: 1rem; background-color: #f8f9fa; border-radius: 8px;">
-                <div style="font-size: 1.5rem;">🧠</div>
-                <div style="font-size: 0.9rem; color: #6c757d; margin: 0.25rem 0;">Skills</div>
-                <div style="font-size: 1.5rem; font-weight: bold; color: #28a745;">{skills_count}</div>
-            </div>
-        </div>
-    </div>
-    """
+    card_html = f"""<div style="border: 1px solid #e9ecef; border-radius: 10px; padding: 1.5rem; margin: 0.5rem 0; background-color: white; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+<div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem;">
+<div>
+<h3 style="margin: 0 0 0.5rem 0; color: #495057; font-size: 1.25rem;">{display_name}</h3>
+{role_html}
+</div>
+<div style="text-align: right; color: #6c757d; font-size: 0.8rem;">
+📊 {incidents_text}
+</div>
+</div>
+<div style="display: flex; gap: 1rem; margin-bottom: 1rem;">
+<div style="flex: 1; text-align: center; padding: 1rem; background-color: #f8f9fa; border-radius: 8px;">
+<div style="font-size: 1.5rem;">👔</div>
+<div style="font-size: 0.9rem; color: #6c757d; margin: 0.25rem 0;">Roles</div>
+<div style="font-size: 1.5rem; font-weight: bold; color: #007bff;">{roles_count}</div>
+</div>
+<div style="flex: 1; text-align: center; padding: 1rem; background-color: #f8f9fa; border-radius: 8px;">
+<div style="font-size: 1.5rem;">🧠</div>
+<div style="font-size: 0.9rem; color: #6c757d; margin: 0.25rem 0;">Skills</div>
+<div style="font-size: 1.5rem; font-weight: bold; color: #28a745;">{skills_count}</div>
+</div>
+</div>
+</div>"""
 
     st.markdown(card_html, unsafe_allow_html=True)
 
