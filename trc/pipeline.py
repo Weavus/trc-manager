@@ -412,32 +412,7 @@ def process_pipeline(
     ensure_dirs()
 
     # Load config and registry
-    config = read_json(
-        CONFIG_PATH,
-        {
-            "pipeline_order": [
-                "transcription_parsing",
-                "text_enhancement",
-                "noise_reduction",
-                "participant_analysis",
-                "summarisation",
-                "keyword_extraction",
-                "master_summary_synthesis",
-            ],
-            "stages": {
-                s: {"enabled": True, "params": {}}
-                for s in [
-                    "transcription_parsing",
-                    "text_enhancement",
-                    "noise_reduction",
-                    "participant_analysis",
-                    "summarisation",
-                    "keyword_extraction",
-                    "master_summary_synthesis",
-                ]
-            },
-        },
-    )
+    config = read_config()
     registry, params_map = load_stage_registry()
 
     incident_path = INCIDENTS_DIR / f"{incident_id}.json"
