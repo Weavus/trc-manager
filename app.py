@@ -671,23 +671,47 @@ def page_library() -> None:
             help="Filter incidents by their titles"
         )
     with col3:
-        # Calendar widget showing dates with TRCs
-        if trc_dates_list:
-            min_date = min(trc_dates_list)
-            max_date = max(trc_dates_list)
-            selected_date = st.date_input(
-                "Filter by Date",
-                value=None,
-                min_value=min_date,
-                max_value=max_date,
-                key="selected_date",
-                help="Select a specific date to show incidents from that day"
-            )
-            # Highlight dates with TRCs
-            if selected_date and selected_date not in trc_dates:
-                st.warning("No TRCs found for selected date")
-        else:
-            selected_date = None
+        # Date range filter with presets
+        from datetime import timedelta
+
+        # Date preset options
+        date_preset = st.selectbox(
+            "Date Range",
+            ["All Dates", "Today", "Last 7 days", "Last 30 days", "Last 90 days", "Custom Range"],
+            help="Choose a date range or select custom range"
+        )
+
+        # Calculate date ranges based on preset
+        today = datetime.now().date()
+        if date_preset == "Today":
+            selected_date_range = [today, today]
+        elif date_preset == "Last 7 days":
+            selected_date_range = [today - timedelta(days=7), today]
+        elif date_preset == "Last 30 days":
+            selected_date_range = [today - timedelta(days=30), today]
+        elif date_preset == "Last 90 days":
+            selected_date_range = [today - timedelta(days=90), today]
+        elif date_preset == "Custom Range":
+            if trc_dates_list:
+                min_date = min(trc_dates_list)
+                max_date = max(trc_dates_list)
+                selected_date_range = st.date_input(
+                    "Select Date Range",
+                    value=[],
+                    min_value=min_date,
+                    max_value=max_date,
+                    key="custom_date_range",
+                    help="Select start and end dates"
+                )
+                if len(selected_date_range) != 2:
+                    selected_date_range = None
+            else:
+                selected_date_range = None
+        else:  # "All Dates"
+            selected_date_range = None
+
+        # Store the selected date range for filtering
+        selected_date = selected_date_range  # This will be used in the filtering logic
     with col4:
         st.session_state["filters"]["people"] = st.multiselect(
             "Filter by People",
@@ -760,13 +784,14 @@ def page_library() -> None:
         if titles and inc.get("title") not in titles:
             continue
 
-        # Filter by selected date
-        if selected_date:
+        # Filter by selected date range
+        if selected_date and len(selected_date) == 2:
             try:
                 trc_date = datetime.fromisoformat(
                     trc.get("start_time", "").replace("Z", "+00:00")
                 ).date()  # noqa: E501
-                if trc_date != selected_date:
+                start_date, end_date = selected_date
+                if not (start_date <= trc_date <= end_date):
                     continue
             except Exception:
                 continue
