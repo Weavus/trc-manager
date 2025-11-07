@@ -234,6 +234,7 @@ def page_upload() -> None:
                                 value=agg,
                                 height=400,
                                 disabled=True,
+                                key=f"in_ms_agg_{inc_id}_{result.trc_id}",
                             )
                             with st.expander("Copy summarisation (all TRCs)"):
                                 st.code(agg)
@@ -247,7 +248,7 @@ def page_upload() -> None:
                                         st.code(json.dumps(val, indent=2))
                                 else:
                                     label = f"{key} {_format_chars_and_size(val or '')}"
-                                    st.text_area(label, value=val or "", height=400, disabled=True)
+                                    st.text_area(label, value=val or "", height=400, disabled=True, key=f"in_{stage}_{key}_{result.trc_id}")
                                     with st.expander(f"Copy {key}"):
                                         st.code(val or "")
 
@@ -261,6 +262,7 @@ def page_upload() -> None:
                                 value=ms_text,
                                 height=400,
                                 disabled=True,
+                                key=f"out_ms_{inc_id}_{result.trc_id}",
                             )
                             with st.expander("Copy master_summary"):
                                 st.code(ms_text)
@@ -281,6 +283,7 @@ def page_upload() -> None:
                                         value=raw,
                                         height=400,
                                         disabled=True,
+                                        key=f"ms_raw_{inc_id}_{result.trc_id}",
                                     )
                                     with st.expander("Copy master_summary_raw_llm_output"):
                                         st.code(raw)
@@ -309,6 +312,7 @@ def page_upload() -> None:
                                         value=val or "",
                                         height=400,
                                         disabled=True,
+                                        key=f"out_{out_key}_{trc_view.get('trc_id')}_{result.trc_id}",
                                     )
                                     with st.expander(f"Copy {out_key}"):
                                         st.code(val or "")
@@ -338,6 +342,7 @@ def page_upload() -> None:
                                             value=raw,
                                             height=400,
                                             disabled=True,
+                                            key=f"art_{ak}_{trc_view.get('trc_id')}_{result.trc_id}",
                                         )
                                         with st.expander(f"Copy {ak}"):
                                             st.code(raw)
@@ -527,6 +532,7 @@ def page_library() -> None:
                             "Refined",
                             value=trc.get("pipeline_outputs", {}).get("refinement", ""),
                             disabled=True,
+                            key=f"refined_{trc['trc_id']}",
                         )
                     with subtabs[2]:
                         st.json(trc.get("pipeline_outputs", {}).get("people_extraction", {}))
@@ -535,12 +541,14 @@ def page_library() -> None:
                             "Raw Text",
                             value=trc.get("pipeline_outputs", {}).get("cleanup", ""),
                             disabled=True,
+                            key=f"raw_{trc['trc_id']}",
                         )
                     with subtabs[4]:
                         st.text_area(
                             "Original VTT",
                             value=trc.get("pipeline_outputs", {}).get("raw_vtt", ""),
                             disabled=True,
+                            key=f"vtt_{trc['trc_id']}",
                         )
 
                     # Rerun controls
@@ -678,7 +686,7 @@ def page_people() -> None:
             with st.form(key=f"add_role_{person['raw_name']}"):
                 role = st.text_input("Role")
                 inc = st.text_input("Incident ID (optional)")
-                reasoning = st.text_area("Reasoning")
+                reasoning = st.text_area("Reasoning", key=f"role_reason_{person['raw_name']}")
                 conf = st.slider("Confidence", 0.0, 10.0, 10.0)
                 if st.form_submit_button("Add Role"):
                     entry = {
@@ -695,7 +703,7 @@ def page_people() -> None:
             with st.form(key=f"add_know_{person['raw_name']}"):
                 know = st.text_input("Knowledge/Skill")
                 inc2 = st.text_input("Incident ID (optional)")
-                reasoning2 = st.text_area("Reasoning")
+                reasoning2 = st.text_area("Reasoning", key=f"know_reason_{person['raw_name']}")
                 conf2 = st.slider("Confidence", 0.0, 10.0, 10.0)
                 if st.form_submit_button("Add Knowledge"):
                     entry = {
