@@ -97,7 +97,7 @@ def sidebar_nav() -> None:
         # Navigation sections
         nav_items = [
             {
-                "name": "TRC Transcript Upload",
+                "name": "TRC Upload",
                 "icon": "📤",
                 "description": "Upload and process transcript files",
                 "badge": None
