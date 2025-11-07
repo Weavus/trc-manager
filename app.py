@@ -972,12 +972,14 @@ def page_config() -> None:
     st.subheader("Maintenance")
     # People maintenance
     st.markdown("**People Directory**")
-    if st.button("Delete ALL People") and st.checkbox(
+    confirm_del_all_people = st.checkbox(
         "Confirm delete ALL people (roles & knowledge will be lost).",
         key="confirm_del_all_people",
-    ):
-        PEOPLE_PATH.write_text("{}\n")
+    )
+    if st.button("Delete ALL People", disabled=not confirm_del_all_people, key="btn_delete_all_people"):
+        save_people_directory({})
         st.success("People directory cleared")
+        st.rerun()
     people_dir = load_people_directory()
     people_names = sorted(list(people_dir.keys()))
     if people_names:
@@ -987,16 +989,17 @@ def page_config() -> None:
             key="delete_person_select",
         )
         delete_person_disabled = del_person == "(select)"
+        confirm_del_person = st.checkbox(
+            f"Confirm delete person '{del_person}'", key=f"confirm_del_person_{del_person}"
+        )
         if (
             st.button(
                 "Delete Person",
-                disabled=delete_person_disabled,
+                disabled=delete_person_disabled or not confirm_del_person,
                 key="btn_delete_person",
             )
             and not delete_person_disabled
-            and st.checkbox(
-                f"Confirm delete person '{del_person}'", key=f"confirm_del_person_{del_person}"
-            )
+            and confirm_del_person
         ):
             people_dir.pop(del_person, None)
             save_people_directory(people_dir)
@@ -1009,10 +1012,15 @@ def page_config() -> None:
     incidents = list_incidents()
     incident_ids = [i.get("incident_id") for i in incidents]
 
-    if st.button("Delete ALL Incidents & TRCs") and st.checkbox(
+    confirm_del_all_incidents = st.checkbox(
         "Confirm delete ALL incidents, TRCs, artifacts & uploads.",
         key="confirm_del_all_incidents",
-    ):
+    )
+    if st.button(
+        "Delete ALL Incidents & TRCs",
+        disabled=not confirm_del_all_incidents,
+        key="btn_delete_all_incidents",
+    ) and confirm_del_all_incidents:
         # Remove incident JSONs
         for f in INCIDENTS_DIR.glob("*.json"):
             with contextlib.suppress(Exception):
@@ -1026,7 +1034,6 @@ def page_config() -> None:
                     with contextlib.suppress(Exception):
                         if p.is_dir():
                             import shutil
-
                             shutil.rmtree(p, ignore_errors=True)
                         else:
                             p.unlink(missing_ok=True)  # type: ignore[arg-type]
