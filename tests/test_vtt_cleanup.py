@@ -2,7 +2,7 @@ from datetime import datetime
 from pathlib import Path
 
 from trc.stages.base import RunContext
-from trc.stages.cleanup import CleanupStage
+from trc.stages.vtt_cleanup import CleanupStage
 
 
 def make_ctx(tmp_path: Path, raw_vtt: str, start_dt: datetime | None) -> RunContext:
