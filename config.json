@@ -4,12 +4,18 @@
     "text_enhancement",
     "noise_reduction",
     "participant_analysis",
-    "summarisation",
     "keyword_extraction",
+    "summarisation",
     "master_summary_synthesis"
   ],
   "stages": {
-    "transcription_parsing": { "enabled": true, "params": { "replacement_rules": {}, "strip_patterns": [] } },
+    "transcription_parsing": {
+      "enabled": true,
+      "params": {
+        "replacement_rules": {},
+        "strip_patterns": []
+      }
+    },
     "text_enhancement": {
       "enabled": true,
       "params": {
@@ -69,6 +75,7 @@
             "dt she": "DTC",
             "dtc": "DTC",
             "stc": "STC",
+            "st she": "STC",
             "ntc": "NTC",
             "hdc": "HDC",
             "orbengalore": "Bangalore"
@@ -142,10 +149,29 @@
         }
       }
     },
-    "noise_reduction": { "enabled": true, "params": { "extra_fillers": [] } },
-    "participant_analysis": { "enabled": true, "params": {} },
-    "summarisation": { "enabled": true, "params": { "llm_model": "placeholder" } },
-    "keyword_extraction": { "enabled": true, "params": {} },
-    "master_summary_synthesis": { "enabled": true, "params": {} }
+    "noise_reduction": {
+      "enabled": true,
+      "params": {
+        "extra_fillers": []
+      }
+    },
+    "participant_analysis": {
+      "enabled": true,
+      "params": {}
+    },
+    "summarisation": {
+      "enabled": true,
+      "params": {
+        "llm_model": "placeholder"
+      }
+    },
+    "keyword_extraction": {
+      "enabled": true,
+      "params": {}
+    },
+    "master_summary_synthesis": {
+      "enabled": true,
+      "params": {}
+    }
   }
 }

@@ -8,6 +8,7 @@ authors = [{ name = "AI", email = "weavus+ai@sourceofevil.org" }]
 dependencies = [
   "streamlit>=1.36.0",
   "st-diff-viewer",
+  "streamlit-sortables",
 ]
 
 [dependency-groups]

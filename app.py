@@ -8,6 +8,7 @@ from typing import Any
 
 import streamlit as st
 from st_diff_viewer import diff_viewer
+from streamlit_sortables import sort_items
 
 from trc.pipeline import (
     CONFIG_PATH,
@@ -1120,166 +1121,195 @@ def page_config() -> None:
             },
         }
 
-    st.subheader("Pipeline Order and Stages")
-    st.caption("Drag to reorder; toggle to enable/disable; edit params JSON.")
+    tabs = st.tabs(["Pipeline Configuration", "People Maintenance", "Incident Maintenance"])
 
-    order = cfg.get("pipeline_order", [])
-    # Manual reordering via selectboxes
-    new_order: list[str] = []
-    for i, _s in enumerate(order):
-        new_order.append(st.selectbox(f"Position {i + 1}", options=order, index=i, key=f"ord_{i}"))
-    if len(set(new_order)) == len(order):
-        cfg["pipeline_order"] = new_order
+    with tabs[0]:
+        st.subheader("Pipeline Order and Stages")
+        st.caption(
+            "Reorder stages using up/down buttons, toggle enable/disable, "
+            "and edit parameters as JSON."
+        )
 
-    for s in order:
-        enabled = st.checkbox(
-            f"Enable {s}",
-            value=cfg.get("stages", {}).get(s, {}).get("enabled", True),
-            key=f"en_{s}",
-        )
-        cfg["stages"].setdefault(s, {})["enabled"] = enabled
-        params_str = json.dumps(cfg["stages"][s].get("params", {}), indent=2)
-        new_params = st.text_area(f"Params for {s}", value=params_str, key=f"pa_{s}")
-        try:
-            cfg["stages"][s]["params"] = json.loads(new_params)
-        except Exception:
-            st.warning(f"Invalid JSON for {s} params; keeping previous")
+        order = cfg.get("pipeline_order", [])
+        st.markdown("**Pipeline Order (Drag to Reorder)**")
+        sorted_order = sort_items(order, key="pipeline_sort")
+        cfg["pipeline_order"] = sorted_order
 
-    st.subheader("Maintenance")
-    # People maintenance
-    st.markdown("**People Directory**")
-    confirm_del_all_people = st.checkbox(
-        "Confirm delete ALL people (roles & knowledge will be lost).",
-        key="confirm_del_all_people",
-    )
-    btn_delete_all_people = st.button(
-        "Delete ALL People",
-        disabled=not confirm_del_all_people,
-        key="btn_delete_all_people",
-    )
-    if btn_delete_all_people:
-        save_people_directory({})
-        st.success("People directory cleared")
-        st.rerun()
-    people_dir = load_people_directory()
-    people_names = sorted(list(people_dir.keys()))
-    if people_names:
-        del_person = st.selectbox(
-            "Delete Individual Person",
-            options=["(select)"] + people_names,
-            key="delete_person_select",
+        st.markdown("---")
+        st.subheader("Stage Settings")
+        for s in order:
+            with st.expander(f"{s.replace('_', ' ').title()}", expanded=False):
+                col1, col2 = st.columns([1, 3])
+                with col1:
+                    enabled = st.checkbox(
+                        "Enabled",
+                        value=cfg.get("stages", {}).get(s, {}).get("enabled", True),
+                        key=f"en_{s}",
+                    )
+                    cfg["stages"].setdefault(s, {})["enabled"] = enabled
+                with col2:
+                    params_str = json.dumps(cfg["stages"][s].get("params", {}), indent=2)
+                    new_params = st.text_area(
+                        "Parameters (JSON)", value=params_str, height=800, key=f"pa_{s}"
+                    )
+                    try:
+                        cfg["stages"][s]["params"] = json.loads(new_params)
+                    except Exception:
+                        st.error(f"Invalid JSON for {s} parameters; keeping previous")
+
+    with tabs[1]:
+        st.subheader("People Directory Maintenance")
+
+        # Handle delete all flag
+        if st.session_state.pop("delete_all_people_flag", False):
+            st.session_state["confirm_del_all_people"] = False
+
+        people_dir = load_people_directory()
+        people_names = sorted(list(people_dir.keys()))
+
+        st.markdown("**Bulk Operations**")
+        confirm_del_all_people = st.checkbox(
+            "Confirm delete ALL people (roles & knowledge will be lost).",
+            key="confirm_del_all_people",
         )
-        delete_person_disabled = del_person == "(select)"
-        confirm_del_person = st.checkbox(
-            f"Confirm delete person '{del_person}'", key=f"confirm_del_person_{del_person}"
-        )
-        if (
-            st.button(
-                "Delete Person",
-                disabled=delete_person_disabled or not confirm_del_person,
-                key="btn_delete_person",
-            )
-            and not delete_person_disabled
-            and confirm_del_person
+        if st.button(
+            "Delete ALL People",
+            disabled=not confirm_del_all_people,
+            key="btn_delete_all_people",
         ):
-            people_dir.pop(del_person, None)
-            save_people_directory(people_dir)
-            st.success(f"Deleted person: {del_person}")
+            save_people_directory({})
+            st.success("People directory cleared")
+            st.session_state["delete_all_people_flag"] = True
             st.rerun()
 
-    st.markdown("---")
-    # TRC / Incident maintenance
-    st.markdown("**TRC / Incident Library**")
-    incidents = list_incidents()
-    incident_ids = [i.get("incident_id") for i in incidents]
+        if people_names:
+            st.markdown("**Individual Deletion**")
+            del_person = st.selectbox(
+                "Select Person to Delete",
+                options=["(select)"] + people_names,
+                key="delete_person_select",
+            )
+            if del_person != "(select)":
+                confirm_del_person = st.checkbox(
+                    f"Confirm delete person '{del_person}'", key=f"confirm_del_person_{del_person}"
+                )
+                if st.button(
+                    "Delete Person",
+                    disabled=not confirm_del_person,
+                    key="btn_delete_person",
+                ):
+                    people_dir.pop(del_person, None)
+                    save_people_directory(people_dir)
+                    st.success(f"Deleted person: {del_person}")
+                    st.rerun()
+        else:
+            st.info("No people in directory")
 
-    confirm_del_all_incidents = st.checkbox(
-        "Confirm delete ALL incidents, TRCs, artifacts & uploads.",
-        key="confirm_del_all_incidents",
-    )
-    if (
-        st.button(
+    with tabs[2]:
+        st.subheader("TRC / Incident Library Maintenance")
+
+        # Handle delete all flag
+        if st.session_state.pop("delete_all_incidents_flag", False):
+            st.session_state["confirm_del_all_incidents"] = False
+
+        incidents = list_incidents()
+        incident_ids = [i.get("incident_id") for i in incidents]
+
+        st.markdown("**Bulk Operations**")
+        confirm_del_all_incidents = st.checkbox(
+            "Confirm delete ALL incidents, TRCs, artifacts & uploads.",
+            key="confirm_del_all_incidents",
+        )
+        if st.button(
             "Delete ALL Incidents & TRCs",
             disabled=not confirm_del_all_incidents,
             key="btn_delete_all_incidents",
-        )
-        and confirm_del_all_incidents
-    ):
-        # Remove incident JSONs
-        for f in INCIDENTS_DIR.glob("*.json"):
-            with contextlib.suppress(Exception):
-                f.unlink()
-        # Remove artifacts + uploads directories
-        artifacts_root = DATA_DIR / "artifacts"
-        uploads_root = DATA_DIR / "uploads"
-        for root in [artifacts_root, uploads_root]:
-            if root.exists():
-                for p in root.glob("*"):
-                    with contextlib.suppress(Exception):
-                        if p.is_dir():
-                            import shutil
+        ):
+            # Remove incident JSONs
+            for f in INCIDENTS_DIR.glob("*.json"):
+                with contextlib.suppress(Exception):
+                    f.unlink()
+            # Remove artifacts + uploads directories
+            artifacts_root = DATA_DIR / "artifacts"
+            uploads_root = DATA_DIR / "uploads"
+            for root in [artifacts_root, uploads_root]:
+                if root.exists():
+                    for p in root.glob("*"):
+                        with contextlib.suppress(Exception):
+                            if p.is_dir():
+                                import shutil
+                                shutil.rmtree(p, ignore_errors=True)
+                            else:
+                                p.unlink(missing_ok=True)  # type: ignore[arg-type]
+            st.success("All incidents/TRCs removed")
+            st.session_state["delete_all_incidents_flag"] = True
+            st.rerun()
 
-                            shutil.rmtree(p, ignore_errors=True)
-                        else:
-                            p.unlink(missing_ok=True)  # type: ignore[arg-type]
-        st.success("All incidents/TRCs removed")
-        st.rerun()
-
-    if incident_ids:
-        sel_inc = st.selectbox(
-            "Select Incident",
-            options=["(select)"] + incident_ids,
-            key="maintenance_select_incident",
-        )
-        if sel_inc != "(select)":
-            # Load selected incident
-            inc_path = INCIDENTS_DIR / f"{sel_inc}.json"
-            inc_doc = json.loads(inc_path.read_text()) if inc_path.exists() else {}
-            trcs = inc_doc.get("trcs", [])
-            trc_labels = [t.get("trc_id") for t in trcs]
-            sel_trc = st.selectbox(
-                "Select TRC to Delete (optional)",
-                options=["(none)"] + trc_labels,
-                key=f"maintenance_select_trc_{sel_inc}",
+        if incident_ids:
+            st.markdown("**Individual Operations**")
+            sel_inc = st.selectbox(
+                "Select Incident",
+                options=["(select)"] + incident_ids,
+                key="maintenance_select_incident",
             )
-            c1, c2 = st.columns(2)
-            with c1:
-                delete_trc_disabled = sel_trc == "(none)"
-                if (
-                    st.button(
-                        "Delete Selected TRC",
-                        disabled=delete_trc_disabled,
-                        key=f"btn_delete_trc_{sel_inc}",
-                    )
-                    and not delete_trc_disabled
-                    and st.checkbox(
-                        f"Confirm delete TRC '{sel_trc}'", key=f"confirm_del_trc_{sel_trc}"
-                    )
-                ):
-                    # Remove TRC entry
-                    new_trcs = [t for t in trcs if t.get("trc_id") != sel_trc]
-                    inc_doc["trcs"] = new_trcs
-                    inc_path.write_text(json.dumps(inc_doc, indent=2))
-                    # Remove artifacts dir for that TRC
-                    art_dir = DATA_DIR / "artifacts" / sel_inc / sel_trc
-                    if art_dir.exists():
-                        import shutil
+            if sel_inc != "(select)":
+                # Load selected incident
+                inc_path = INCIDENTS_DIR / f"{sel_inc}.json"
+                inc_doc = json.loads(inc_path.read_text()) if inc_path.exists() else {}
+                trcs = inc_doc.get("trcs", [])
+                trc_labels = [t.get("trc_id") for t in trcs]
 
-                        shutil.rmtree(art_dir, ignore_errors=True)
-                    # Remove original upload file if present
-                    for t in trcs:
-                        if t.get("trc_id") == sel_trc:
-                            orig_fp = t.get("original_filepath")
-                            if orig_fp:
-                                with contextlib.suppress(Exception):
-                                    Path(orig_fp).unlink(missing_ok=True)
-                            break
-                    st.success(f"Deleted TRC: {sel_trc}")
-                    st.rerun()
-            with c2:
-                if st.button("Delete Entire Incident") and st.checkbox(
+                if trc_labels:
+                    trc_options = [
+                        f"{t.get('trc_id')} - {inc_doc.get('title', 'No Title')}" for t in trcs
+                    ]
+                    sel_trc_display = st.selectbox(
+                        "Select TRC to Delete",
+                        options=["(none)"] + trc_options,
+                        key=f"maintenance_select_trc_{sel_inc}",
+                    )
+                    # Extract the actual trc_id from the selection
+                    if sel_trc_display != "(none)":
+                        sel_trc = sel_trc_display.split(" - ")[0]
+                    else:
+                        sel_trc = "(none)"
+                    if sel_trc != "(none)":
+                        confirm_del_trc = st.checkbox(
+                            f"Confirm delete TRC '{sel_trc}'", key=f"confirm_del_trc_{sel_trc}"
+                        )
+                        if st.button(
+                            "Delete Selected TRC",
+                            disabled=not confirm_del_trc,
+                            key=f"btn_delete_trc_{sel_inc}",
+                        ):
+                            # Remove TRC entry
+                            new_trcs = [t for t in trcs if t.get("trc_id") != sel_trc]
+                            inc_doc["trcs"] = new_trcs
+                            inc_path.write_text(json.dumps(inc_doc, indent=2))
+                            # Remove artifacts dir for that TRC
+                            art_dir = DATA_DIR / "artifacts" / sel_inc / sel_trc
+                            if art_dir.exists():
+                                import shutil
+                                shutil.rmtree(art_dir, ignore_errors=True)
+                            # Remove original upload file if present
+                            for t in trcs:
+                                if t.get("trc_id") == sel_trc:
+                                    orig_fp = t.get("original_filepath")
+                                    if orig_fp:
+                                        with contextlib.suppress(Exception):
+                                            Path(orig_fp).unlink(missing_ok=True)
+                                    break
+                            st.success(f"Deleted TRC: {sel_trc}")
+                            st.rerun()
+
+                confirm_del_inc = st.checkbox(
                     f"Confirm delete incident '{sel_inc}' and ALL its TRCs",
                     key=f"confirm_del_inc_{sel_inc}",
+                )
+                if st.button(
+                    "Delete Entire Incident",
+                    disabled=not confirm_del_inc,
+                    key=f"btn_delete_inc_{sel_inc}",
                 ):
                     # Delete incident file
                     with contextlib.suppress(Exception):
@@ -1288,18 +1318,20 @@ def page_config() -> None:
                     inc_art_dir = DATA_DIR / "artifacts" / sel_inc
                     if inc_art_dir.exists():
                         import shutil
-
                         shutil.rmtree(inc_art_dir, ignore_errors=True)
                     # Delete uploads dir
                     inc_uploads_dir = DATA_DIR / "uploads" / sel_inc
                     if inc_uploads_dir.exists():
                         import shutil
-
                         shutil.rmtree(inc_uploads_dir, ignore_errors=True)
                     st.success(f"Deleted incident: {sel_inc}")
                     st.rerun()
+        else:
+            st.info("No incidents in library")
 
-    if st.button("Save Configuration"):
+    # Save button outside tabs
+    st.markdown("---")
+    if st.button("Save Configuration", type="primary"):
         CONFIG_PATH.write_text(json.dumps(cfg, indent=2))
         st.success("Configuration saved")
 
