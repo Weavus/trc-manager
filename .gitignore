@@ -1,0 +1,54 @@
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual environments
+.venv/
+venv/
+
+# Test, lint, and type-check caches
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.pytype/
+.tox/
+.cache/
+
+# Coverage
+.coverage
+.coverage.*
+htmlcov/
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
+.eggs/
+pip-wheel-metadata/
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Editor settings
+.vscode/
+.idea/
+
+# Environment files
+.env
+.env.*
+*.env
+
+# Logs
+*.log
+logs/
+
+# Streamlit
+.streamlit/
+
+# Application data (generated)
+# All runtime data, uploads, artifacts, incidents, and people directory
+# are written here and should not be committed.
+data/
+!data/.gitkeep
