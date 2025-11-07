@@ -176,32 +176,93 @@ def sidebar_nav() -> None:
 
 
 def page_upload() -> None:
-    st.header("TRC Upload")
+    # Page header with improved styling and metrics
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        st.markdown("# 📤 TRC Upload")
+        st.markdown("*Upload and process Technical Recovery Call transcripts*")
+    with col2:
+        # Quick stats
+        total_incidents = len(list_incidents())
+        total_processed = len(st.session_state.get("processed_files", set()))
+        st.metric("Total Incidents", total_incidents)
+        st.metric("Files Processed", total_processed)
 
     # Initialize session state for tracking processed files
     if "processed_files" not in st.session_state:
         st.session_state.processed_files = set()
 
-    # Add a button to clear processed files list
-    col1, col2 = st.columns([3, 1])
-    with col1:
-        st.subheader("Upload TRC Files")
-    with col2:
-        if st.button(
-            "Clear Processed List",
-            help="Clear the list of processed files to allow re-uploading"
-        ):
-            st.session_state.processed_files.clear()
-            st.rerun()
+    st.markdown("---")
 
+    # Upload section with improved design
+    st.markdown("### 📁 File Upload")
+
+    # Instructions and requirements
+    with st.expander("📋 Upload Requirements & Instructions", expanded=False):
+        st.markdown("""
+        **File Format:** Upload .vtt (WebVTT) transcript files only
+
+        **Filename Format:** Files must follow this pattern:
+        `INC12345678_31122024-1430.vtt`
+
+        - `INC12345678`: Incident ID (8-12 digits)
+        - `31122024`: Date in DDMMYYYY format
+        - `1430`: Time in HHMM format (24-hour)
+
+        **Example:** `INC001234567_25122024-0900.vtt`
+
+        **Notes:**
+        - Multiple files can be uploaded simultaneously
+        - Existing files will be detected and you can choose to overwrite
+        - Processing includes participant analysis, summarization, and keyword extraction
+        """)
+
+    # File uploader with better styling
     files = st.file_uploader(
-        "Upload one or more TRC .vtt files",
+        "Select TRC .vtt files to upload and process",
         type=["vtt"],
         accept_multiple_files=True,
+        help="Choose one or more .vtt transcript files following the naming convention above"
     )
+
+    # Clear processed list button
+    col1, col2, col3 = st.columns([2, 2, 1])
+    with col3:
+        if st.button(
+            "🔄 Clear History",
+            help="Clear the list of processed files to allow re-uploading",
+            use_container_width=True
+        ):
+            st.session_state.processed_files.clear()
+            st.success("✅ Processing history cleared!")
+            st.rerun()
+
     if not files:
-        st.info("Select .vtt files to process.")
+        # Enhanced empty state
+        st.markdown("""
+        <div style="
+            text-align: center;
+            padding: 3rem;
+            background-color: #f8f9fa;
+            border-radius: 10px;
+            border: 2px dashed #dee2e6;
+            margin: 2rem 0;
+        ">
+            <h3 style="color: #6c757d; margin-bottom: 1rem;">📤 Ready to Upload</h3>
+            <p style="color: #6c757d; margin-bottom: 2rem;">
+                Select .vtt transcript files above to begin processing Technical Recovery Calls.
+                Files will be analyzed for participants, summarized, and organized automatically.
+            </p>
+            <div style="font-size: 0.9rem; color: #6c757d;">
+                💡 <strong>Tip:</strong> Check the requirements above if you're unsure about file formatting
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
         return
+
+    # File analysis and processing section
+    st.markdown("---")
+    st.markdown("### 🔄 Processing Status")
 
     # Filter out already processed files
     unprocessed_files = []
@@ -217,18 +278,173 @@ def page_upload() -> None:
         else:
             skipped_files.append(up.name)
 
+    # Display file status summary
+    total_files = len(files)
+    processed_count = len(skipped_files)
+    to_process_count = len(unprocessed_files)
+
+    # Status cards
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric("📁 Total Files", total_files)
+    with col2:
+        st.metric("✅ Already Processed", processed_count)
+    with col3:
+        st.metric("🔄 To Process", to_process_count)
+
     # Show feedback about skipped files
     if skipped_files:
-        st.info(
-            f"Skipping {len(skipped_files)} already processed file(s): {', '.join(skipped_files)}"
-        )
+        with st.expander(f"ℹ️ Already Processed Files ({len(skipped_files)})", expanded=False):
+            for filename in skipped_files:
+                st.markdown(f"• {filename}")
+            st.info("These files have already been processed. Use 'Clear History' to re-upload if needed.")
 
     if not unprocessed_files:
-        st.success("All selected files have already been processed!")
+        st.success("🎉 All selected files have already been processed!")
         return
 
+    # Processing section
+    st.markdown("---")
+    st.markdown("### ⚙️ Processing Files")
+
     files = unprocessed_files
-    st.info(f"Processing {len(files)} file(s)...")
+    st.info(f"📋 Ready to process {len(files)} file{'s' if len(files) != 1 else ''}...")
+
+    # Process button
+    if st.button("🚀 Start Processing", type="primary", use_container_width=True):
+        process_uploaded_files(files)
+    else:
+        st.caption("Click above to begin processing the uploaded files")
+
+
+def process_uploaded_files(files):
+    """Process uploaded files with improved progress tracking and feedback."""
+    progress_bar = st.progress(0)
+    status_text = st.empty()
+
+    for i, up in enumerate(files):
+        name = up.name
+        progress = (i + 1) / len(files)
+        progress_bar.progress(progress)
+        status_text.text(f"Processing {i+1}/{len(files)}: {name}")
+
+        content = up.read()
+        inc_id, dt_token = parse_filename_info(name)
+
+        if not inc_id or not dt_token:
+            st.error(f"❌ **{name}**: Invalid filename format. Must include INC id and DDMMYYYY-HHMM time.")
+            continue
+
+        # Derive ISO time from ddmmyyyy-hhmm
+        try:
+            dt = datetime.strptime(dt_token, "%d%m%Y-%H%M")
+            start_iso = dt.strftime("%Y-%m-%dT%H:%M:00Z")
+        except Exception:
+            st.error(f"❌ **{name}**: Invalid date-time format. Expected DDMMYYYY-HHMM.")
+            continue
+
+        # Check for existing incident and TRC
+        inc_path = INCIDENTS_DIR / f"{inc_id}.json"
+        existing: dict[str, Any] = {}
+        if inc_path.exists():
+            existing = json.loads(inc_path.read_text())
+
+        trcs = existing.get("trcs", [])
+        match = next((t for t in trcs if t.get("start_time") == start_iso), None)
+        new_hash = __import__("hashlib").sha256(content).hexdigest()
+
+        # Handle overwrite scenarios
+        if match:
+            old_hash = match.get("file_hash")
+            if old_hash and old_hash == new_hash:
+                st.warning(f"⚠️ **{name}**: Identical TRC already exists for {inc_id} at {start_iso}")
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button(f"Overwrite Anyway", key=f"overwrite_same_{inc_id}_{start_iso}_{name}"):
+                        st.session_state[f"confirm_overwrite_{inc_id}_{start_iso}"] = True
+                        st.rerun()
+                with col2:
+                    if st.button(f"Skip", key=f"skip_same_{inc_id}_{start_iso}_{name}"):
+                        continue
+                if not st.session_state.get(f"confirm_overwrite_{inc_id}_{start_iso}", False):
+                    continue
+            else:
+                st.warning(f"⚠️ **{name}**: Different TRC exists for {inc_id} at {start_iso}")
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button(f"Replace Existing", key=f"overwrite_diff_{inc_id}_{start_iso}_{name}"):
+                        st.session_state[f"confirm_replace_{inc_id}_{start_iso}"] = True
+                        st.rerun()
+                with col2:
+                    if st.button(f"Skip", key=f"skip_diff_{inc_id}_{start_iso}_{name}"):
+                        continue
+                if not st.session_state.get(f"confirm_replace_{inc_id}_{start_iso}", False):
+                    continue
+
+        # Update existing TRC if overwriting
+        if match:
+            try:
+                inc_doc = existing if existing else json.loads(inc_path.read_text())
+            except Exception:
+                inc_doc = existing
+            for t in inc_doc.get("trcs", []):
+                if t.get("start_time") == start_iso:
+                    t.setdefault("pipeline_outputs", {})["raw_vtt"] = content.decode("utf-8", errors="ignore")
+                    t["file_hash"] = new_hash
+                    break
+            inc_path.write_text(json.dumps(inc_doc, indent=2))
+
+        # Save upload file
+        upload_dir = DATA_DIR / "uploads" / inc_id
+        upload_dir.mkdir(parents=True, exist_ok=True)
+        save_name = f"{inc_id}-{dt_token}.vtt"
+        save_path = upload_dir / save_name
+        save_path.write_bytes(content)
+
+        # Process with spinner
+        with st.spinner(f"🔄 Processing {inc_id}..."):
+            result = process_pipeline(content.decode("utf-8", errors="ignore"), inc_id, start_iso)
+
+        if result.success:
+            st.success(f"✅ **{name}**: Successfully processed incident {inc_id}!")
+
+            # Mark as processed
+            file_id = f"{name}_{hash(content)}"
+            st.session_state.processed_files.add(file_id)
+
+            # Update incident file with metadata
+            inc = json.loads(inc_path.read_text())
+            trc = next(t for t in inc["trcs"] if t["trc_id"] == result.trc_id)
+            trc["original_filename"] = save_name
+            trc["original_filepath"] = str(save_path)
+            trc["file_hash"] = new_hash
+            inc_path.write_text(json.dumps(inc, indent=2))
+
+            # Navigation option
+            if st.button(f"📚 View {inc_id} in Library", key=f"view_{inc_id}_{name}"):
+                st.session_state["page"] = "TRC Library"
+                st.session_state["filters"]["incident_ids"] = [inc_id]
+                st.rerun()
+
+        else:
+            st.error(f"❌ **{name}**: Processing failed for {inc_id} at stage {result.failed_stage}")
+
+    # Clear progress indicators
+    progress_bar.empty()
+    status_text.empty()
+
+    # Final summary
+    st.success("🎉 File processing complete!")
+
+    # Quick actions
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("📚 Go to Library", use_container_width=True):
+            st.session_state["page"] = "TRC Library"
+            st.rerun()
+    with col2:
+        if st.button("📤 Upload More Files", use_container_width=True):
+            st.rerun()
 
     for up in files:
         name = up.name
