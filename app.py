@@ -1873,8 +1873,24 @@ def display_person_card(person, directory):
         [k.get("incident_id") for k in person.get("discovered_knowledge", []) if k.get("incident_id")]
     ))
 
-    # Card layout using Streamlit components (more reliable than HTML)
+    # Card layout with visual styling
+    st.markdown("""
+    <style>
+    .person-card {
+        border: 1px solid #e9ecef;
+        border-radius: 10px;
+        padding: 1.5rem;
+        margin: 0.5rem 0;
+        background-color: white;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
     with st.container():
+        # Card wrapper with styling
+        st.markdown('<div class="person-card">', unsafe_allow_html=True)
+
         # Card header with name and incident count
         col1, col2 = st.columns([3, 1])
         with col1:
@@ -1891,8 +1907,8 @@ def display_person_card(person, directory):
         with col2:
             st.metric("🧠 Skills", skills_count)
 
-        # Divider for visual separation
-        st.divider()
+        # Close card wrapper
+        st.markdown('</div>', unsafe_allow_html=True)
 
     # Action buttons (outside the HTML card)
     col1, col2, col3 = st.columns(3)
