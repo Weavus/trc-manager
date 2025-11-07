@@ -732,8 +732,8 @@ def page_library() -> None:
     with col2:
         sort_by = st.selectbox(
             "Sort By",
-            ["Newest First", "Oldest First", "Incident ID", "Title"],
-            help="Sort incidents by different criteria"
+            ["Newest First", "Oldest First"],
+            help="Sort incidents by date"
         )
     with col3:
         status_filter = st.selectbox(
@@ -884,8 +884,13 @@ def page_library() -> None:
                 }
             incidents_by_date["Unknown Date"][incident_id]["trcs"].append(item["trc"])
 
-    # Sort dates newest first (but keep "Unknown Date" at end)
-    sorted_dates = sorted([d for d in incidents_by_date if d != "Unknown Date"], reverse=True)
+    # Sort dates based on user selection (keep "Unknown Date" at end)
+    dates_to_sort = [d for d in incidents_by_date if d != "Unknown Date"]
+    if sort_by == "Newest First":
+        sorted_dates = sorted(dates_to_sort, reverse=True)
+    else:  # "Oldest First"
+        sorted_dates = sorted(dates_to_sort)
+
     if "Unknown Date" in incidents_by_date:
         sorted_dates.append("Unknown Date")
 
