@@ -49,9 +49,18 @@ class NoiseReductionStage:
                 prompt_file = llm_config["prompt_file"]
 
                 # For noise reduction, we need to provide known_terms and transcript
-                # Get known terms from text_enhancement stage or use empty
-                known_terms = ctx.trc.get("pipeline_outputs", {}).get("text_enhancement", "")
-                if not known_terms:
+                # Get known terms from config params
+                known_terms_config = cfg.get("known_terms", {})
+                if known_terms_config:
+                    # Format known terms by category for the prompt
+                    formatted_terms = []
+                    for category, terms in known_terms_config.items():
+                        if terms:
+                            category_name = category.replace("_", " ").title()
+                            terms_list = ", ".join(terms)
+                            formatted_terms.append(f"**{category_name}:**\n{terms_list}")
+                    known_terms = "\n\n".join(formatted_terms)
+                else:
                     known_terms = "No specific terms provided."
 
                 cleaned_text = llm_client.call_llm_with_prompt_file(

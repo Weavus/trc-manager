@@ -162,6 +162,88 @@
       "enabled": true,
       "params": {
         "extra_fillers": [],
+        "known_terms": {
+          "companies": [
+            "Refinitiv",
+            "LSEG",
+            "Thomson Reuters"
+          ],
+          "divisions": [
+            "Infrastructure & Cloud",
+            "Data & Analytics"
+          ],
+          "products": [
+            "Eikon",
+            "Workspace",
+            "Elektron",
+            "DataScope",
+            "RDP",
+            "Datacloud",
+            "Timeseries"
+          ],
+          "tools": [
+            "ServiceNow",
+            "Datadog",
+            "BigPanda",
+            "ThousandEyes",
+            "Rundeck",
+            "Jira",
+            "Confluence",
+            "SharePoint",
+            "PowerBI"
+          ],
+          "teams_and_roles": [
+            "SCT",
+            "FLS",
+            "GSOC",
+            "PE",
+            "Dev",
+            "SRE",
+            "RE",
+            "MIM"
+          ],
+          "regions_and_sites": [
+            "AMERS2",
+            "AMERS1",
+            "AMERS",
+            "EMEA",
+            "APAC",
+            "LO5",
+            "DTC",
+            "PLN",
+            "NTC",
+            "HDC",
+            "STC",
+            "SGW",
+            "UK2"
+          ],
+          "incident_management_terms": [
+            "TRC",
+            "TRT",
+            "MTM",
+            "P3-HiPo",
+            "HotTopic",
+            "failover",
+            "SR",
+            "CHG",
+            "INC",
+            "CTASK",
+            "RITM"
+          ],
+          "technical_acronyms": [
+            "DAPS",
+            "DACS",
+            "TRACS",
+            "UDIP",
+            "AAA",
+            "CASV",
+            "EEM",
+            "OSM",
+            "UUID",
+            "DBR",
+            "DBW"
+          ]
+        },
         "llm": {
           "prompt_file": "trc/prompts/noise_reduction.md"
         }
