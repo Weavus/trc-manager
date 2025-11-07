@@ -6,10 +6,11 @@ TRC Manager is a Streamlit application and modular processing pipeline for handl
 - Upload multiple `.vtt` transcript files per incident.
 - Automatic incident file management (`data/incidents/INC*.json`).
 - Modular pipeline stages (vtt_cleanup, refinement, people_extraction, summarisation, keyword_extraction, master_summary).
-- Stage dependency resolution and partial re-runs from any stage.
+- Configurable dialogue-only text replacement during refinement.
 - Artifact persistence (text + JSON) under `data/artifacts/`.
 - People directory aggregation with discovered roles & knowledge.
 - Interactive editing of titles, summaries, people metadata, and configuration.
+
 
 ## Repository Layout
 ```
@@ -57,6 +58,38 @@ The Configuration page lets you:
 - Enable/disable stages.
 - Edit per-stage JSON params.
 - Clear the people directory.
+
+### Refinement `replacement_rules`
+The refinement stage supports hierarchical `replacement_rules` under `stages.refinement.params.replacement_rules` in `config.json`. Structure is nested categories mapping case-insensitive substrings to their standardized replacements. All nested dictionaries are flattened and applied longest-key first to reduce partial overlap issues.
+
+Example snippet:
+```json
+"refinement": {
+  "enabled": true,
+  "params": {
+    "replacement_rules": {
+      "common_misspellings": {
+        "cloud era": "Cloudera",
+        "octa": "Okta"
+      },
+      "filler_words_to_standardize_or_remove": {
+        "uh": "",
+        "Umm": ""
+      }
+    }
+  }
+}
+```
+Behavior:
+- Only dialogue text after a time/speaker prefix (e.g. `12:34 Alice: hello`) is transformed; continuation lines (no time prefix) are also processed.
+- Keys are treated as literal substrings (escaped in regex) and matched case-insensitively.
+- Empty replacement values remove the matched text.
+- Ordering: longest keys first, then sequential pass per key.
+- Invalid regex compilation (should not occur due to escaping) is silently skipped.
+
+Tips:
+- Prefer full words/phrases to avoid mid-word unintended changes.
+- If two keys overlap ("cloud" vs "cloud era"), keep the longer phrase to preserve specificity.
 
 ## Logging
 Logs are written to `app.log` and streamed to console via `setup_logging()`.
