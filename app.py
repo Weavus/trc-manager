@@ -1723,8 +1723,21 @@ def display_incidents_as_timeline(sorted_dates, incidents_by_date):
 
 
 def page_people() -> None:
-    st.header("People Directory")
-    directory = load_people_directory()
+    # Page header with improved styling and metrics
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        st.markdown("# 👥 People Directory")
+        st.markdown("*Manage participant information and expertise*")
+    with col2:
+        directory = load_people_directory()
+        total_people = len(directory)
+        total_roles = sum(len(p.get("discovered_roles", [])) for p in directory.values())
+        total_skills = sum(len(p.get("discovered_knowledge", [])) for p in directory.values())
+        st.metric("Total People", total_people)
+        st.metric("Total Roles", total_roles)
+        st.metric("Total Skills", total_skills)
+
+    # Prepare filter data
     names = sorted(list(directory.keys()))
     roles_set = sorted(
         {
@@ -1743,12 +1756,38 @@ def page_people() -> None:
         }
     )
 
-    with st.sidebar:
-        st.subheader("Filters")
-        selected_names = st.multiselect("Filter by Name", options=names)
-        selected_roles = st.multiselect("Filter by Role", options=roles_set)
-        selected_skills = st.multiselect("Filter by Skill/Knowledge", options=skills_set)
+    # Main page filters section
+    st.markdown("---")
+    st.markdown("### 🔍 Filters & View Options")
 
+    # Filters row
+    col1, col2, col3, col4 = st.columns([2, 2, 2, 2])
+    with col1:
+        selected_names = st.multiselect(
+            "Filter by Name",
+            options=names,
+            help="Select specific people to display"
+        )
+    with col2:
+        selected_roles = st.multiselect(
+            "Filter by Role",
+            options=roles_set,
+            help="Show people with specific roles"
+        )
+    with col3:
+        selected_skills = st.multiselect(
+            "Filter by Skill/Knowledge",
+            options=skills_set,
+            help="Show people with specific skills or knowledge"
+        )
+    with col4:
+        view_mode = st.selectbox(
+            "View Mode",
+            ["Cards", "List"],
+            help="Choose how to display people"
+        )
+
+    # Apply filters
     def person_matches(p: dict[str, Any]) -> bool:
         if selected_names and p.get("raw_name") not in selected_names:
             return False
@@ -1767,11 +1806,251 @@ def page_people() -> None:
     ]
 
     if not filtered:
-        st.info("No people in directory")
+        # Enhanced empty state
+        st.markdown("""
+        <div style="
+            text-align: center;
+            padding: 3rem;
+            background-color: #f8f9fa;
+            border-radius: 10px;
+            border: 2px dashed #dee2e6;
+        ">
+            <h3 style="color: #6c757d; margin-bottom: 1rem;">👥 No People Found</h3>
+            <p style="color: #6c757d; margin-bottom: 2rem;">
+                No people match your current filters, or the directory is empty.
+                People are automatically discovered during TRC processing.
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
         return
 
-    for person in filtered:
-        with st.expander(person.get("display_name") or person.get("raw_name")):
+    # Display people based on view mode
+    if view_mode == "Cards":
+        display_people_as_cards(filtered, directory)
+    else:  # List view
+        display_people_as_list(filtered, directory)
+
+
+def display_people_as_cards(filtered_people, directory):
+    """Display people in a modern card-based layout."""
+    # Group people by first letter for better organization
+    people_by_letter = {}
+    for person in filtered_people:
+        display_name = person.get("display_name") or person.get("raw_name")
+        first_letter = display_name[0].upper()
+        if first_letter not in people_by_letter:
+            people_by_letter[first_letter] = []
+        people_by_letter[first_letter].append(person)
+
+    # Sort letters
+    sorted_letters = sorted(people_by_letter.keys())
+
+    for letter in sorted_letters:
+        st.markdown(f"### {letter}")
+        people_in_letter = people_by_letter[letter]
+
+        # Create cards in a responsive grid
+        cols = st.columns(min(3, len(people_in_letter)))
+        col_idx = 0
+
+        for person in people_in_letter:
+            with cols[col_idx % len(cols)]:
+                display_person_card(person, directory)
+            col_idx += 1
+
+
+def display_person_card(person, directory):
+    """Display a single person as a modern card."""
+    display_name = person.get("display_name") or person.get("raw_name")
+    raw_name = person.get("raw_name")
+    role_override = person.get("role_override")
+
+    # Get stats
+    roles_count = len(person.get("discovered_roles", []))
+    skills_count = len(person.get("discovered_knowledge", []))
+    total_incidents = len(set(
+        [r.get("incident_id") for r in person.get("discovered_roles", []) if r.get("incident_id")] +
+        [k.get("incident_id") for k in person.get("discovered_knowledge", []) if k.get("incident_id")]
+    ))
+
+    # Card layout
+    st.markdown(f"""
+    <div style="
+        border: 1px solid #e9ecef;
+        border-radius: 10px;
+        padding: 1.5rem;
+        margin: 0.5rem 0;
+        background-color: white;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        transition: box-shadow 0.3s ease;
+    ">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem;">
+            <div>
+                <h4 style="margin: 0; color: #495057;">{display_name}</h4>
+                {f'<p style="margin: 0.25rem 0; color: #6c757d; font-size: 0.9rem;">{role_override}</p>' if role_override else ''}
+            </div>
+            <div style="text-align: right;">
+                <div style="font-size: 0.8rem; color: #6c757d;">{total_incidents} incidents</div>
+            </div>
+        </div>
+        <div style="display: flex; gap: 1rem; margin-bottom: 1rem;">
+            <div style="flex: 1;">
+                <div style="font-size: 0.9rem; color: #6c757d;">Roles</div>
+                <div style="font-size: 1.2rem; font-weight: bold; color: #007bff;">{roles_count}</div>
+            </div>
+            <div style="flex: 1;">
+                <div style="font-size: 0.9rem; color: #6c757d;">Skills</div>
+                <div style="font-size: 1.2rem; font-weight: bold; color: #28a745;">{skills_count}</div>
+            </div>
+        </div>
+    """, unsafe_allow_html=True)
+
+    # Action buttons
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        if st.button("👁️ View Details", key=f"view_{raw_name}", use_container_width=True):
+            st.session_state[f"expand_{raw_name}"] = not st.session_state.get(f"expand_{raw_name}", False)
+    with col2:
+        if st.button("✏️ Edit", key=f"edit_{raw_name}", use_container_width=True):
+            st.session_state[f"edit_mode_{raw_name}"] = not st.session_state.get(f"edit_mode_{raw_name}", False)
+    with col3:
+        if st.button("🔗 View Incidents", key=f"incidents_{raw_name}", use_container_width=True):
+            # Filter TRC library by this person
+            st.session_state["page"] = "TRC Library"
+            st.session_state["filters"]["people"] = [raw_name]
+            st.rerun()
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    # Expanded details
+    if st.session_state.get(f"expand_{raw_name}", False):
+        display_person_details(person, directory)
+
+    # Edit mode
+    if st.session_state.get(f"edit_mode_{raw_name}", False):
+        display_person_editor(person, directory)
+
+
+def display_person_details(person, directory):
+    """Display detailed view of a person."""
+    raw_name = person.get("raw_name")
+
+    with st.expander("Person Details", expanded=True):
+        # Edit display name and role override
+        orig_dn = person.get("display_name", "")
+        orig_ro = person.get("role_override") or ""
+        dn_key = f"dn_{raw_name}"
+        ro_key = f"ro_{raw_name}"
+        dn = st.text_input("Display Name", value=orig_dn, key=dn_key)
+        ro = st.text_input("Canonical Role (Override)", value=orig_ro, key=ro_key)
+
+        if dn != orig_dn or ro != orig_ro:
+            c1, c2 = st.columns(2)
+            with c1:
+                if st.button("Save Changes", key=f"save_p_{raw_name}"):
+                    directory[raw_name]["display_name"] = dn
+                    directory[raw_name]["role_override"] = ro or None
+                    save_people_directory(directory)
+                    st.success("Saved")
+            with c2:
+                if st.button("Revert", key=f"revert_p_{raw_name}"):
+                    st.session_state[dn_key] = orig_dn
+                    st.session_state[ro_key] = orig_ro
+                    st.info("Reverted")
+                    st.rerun()
+
+        tabs = st.tabs(["Discovered Roles", "Discovered Knowledge"])
+        with tabs[0]:
+            for i, entry in enumerate(person.get("discovered_roles", [])):
+                st.subheader(entry.get("role"))
+                st.caption(f"From Incident: {entry.get('incident_id')}")
+                st.progress(
+                    (entry.get("confidence_score") or 0.0) / 10.0,
+                    text=f"Confidence: {int((entry.get('confidence_score') or 0.0) * 10)}%",
+                )
+                st.info(f"Reasoning: {entry.get('reasoning')}")
+                if st.button("Delete Role", key=f"del_role_{raw_name}_{i}"):
+                    directory[raw_name]["discovered_roles"].pop(i)
+                    save_people_directory(directory)
+                    st.success("Role removed")
+        with tabs[1]:
+            for i, entry in enumerate(person.get("discovered_knowledge", [])):
+                st.subheader(entry.get("knowledge"))
+                st.caption(f"From Incident: {entry.get('incident_id')}")
+                st.progress(
+                    (entry.get("confidence_score") or 0.0) / 10.0,
+                    text=f"Confidence: {int((entry.get('confidence_score') or 0.0) * 10)}%",
+                )
+                st.info(f"Reasoning: {entry.get('reasoning')}")
+                if st.button("Delete Knowledge", key=f"del_know_{raw_name}_{i}"):
+                    directory[raw_name]["discovered_knowledge"].pop(i)
+                    save_people_directory(directory)
+                    st.success("Knowledge removed")
+
+
+def display_person_editor(person, directory):
+    """Display inline editor for person details."""
+    raw_name = person.get("raw_name")
+
+    with st.expander("Edit Person", expanded=True):
+        st.markdown("### Quick Edit")
+
+        # Display name editor
+        new_display_name = st.text_input(
+            "Display Name",
+            value=person.get("display_name", ""),
+            key=f"quick_display_name_{raw_name}"
+        )
+
+        # Role override editor
+        new_role_override = st.text_input(
+            "Canonical Role (Override)",
+            value=person.get("role_override", ""),
+            key=f"quick_role_override_{raw_name}"
+        )
+
+        # Save/Cancel buttons
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("💾 Save Changes", key=f"quick_save_{raw_name}", use_container_width=True):
+                directory[raw_name]["display_name"] = new_display_name
+                directory[raw_name]["role_override"] = new_role_override or None
+                save_people_directory(directory)
+                st.success("Changes saved!")
+                st.session_state[f"edit_mode_{raw_name}"] = False
+                st.rerun()
+        with col2:
+            if st.button("❌ Cancel", key=f"quick_cancel_{raw_name}", use_container_width=True):
+                st.session_state[f"edit_mode_{raw_name}"] = False
+                st.rerun()
+
+
+def display_people_as_list(filtered_people, directory):
+    """Display people in a compact list format."""
+    st.markdown("### 📋 List View")
+
+    for person in filtered_people:
+        display_name = person.get("display_name") or person.get("raw_name")
+        raw_name = person.get("raw_name")
+        roles_count = len(person.get("discovered_roles", []))
+        skills_count = len(person.get("discovered_knowledge", []))
+
+        # List item
+        col1, col2, col3, col4 = st.columns([3, 2, 1, 1])
+        with col1:
+            st.markdown(f"**{display_name}**")
+        with col2:
+            role_override = person.get("role_override")
+            st.markdown(f"{role_override or 'No canonical role'}")
+        with col3:
+            st.markdown(f"👔 {roles_count} role{roles_count != 1 and 's' or ''}")
+        with col4:
+            if st.button("View", key=f"list_view_{raw_name}"):
+                st.session_state[f"expand_{raw_name}"] = not st.session_state.get(f"expand_{raw_name}", False)
+
+        # Expanded details
+        if st.session_state.get(f"expand_{raw_name}", False):
+            display_person_details(person, directory)
             orig_dn = person.get("display_name", "")
             orig_ro = person.get("role_override") or ""
             dn_key = f"dn_{person['raw_name']}"
