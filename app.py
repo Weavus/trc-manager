@@ -615,7 +615,17 @@ def filter_incidents(incidents: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
 
 def page_library() -> None:
-    st.header("TRC Library")
+    # Page header with improved styling
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        st.markdown("# 📚 TRC Library")
+        st.markdown("*Browse and manage processed Technical Recovery Calls*")
+    with col2:
+        # Quick stats
+        total_incidents = len(list_incidents())
+        total_trcs = sum(len(inc.get("trcs", [])) for inc in list_incidents())
+        st.metric("Total Incidents", total_incidents)
+        st.metric("Total TRCs", total_trcs)
 
     incidents = list_incidents()
 
@@ -637,47 +647,98 @@ def page_library() -> None:
     # Convert to list and sort for calendar
     trc_dates_list = sorted(list(trc_dates))
 
+    # Quick filters bar
+    st.markdown("---")
+    col1, col2, col3, col4 = st.columns([2, 2, 2, 1])
+    with col1:
+        view_mode = st.selectbox(
+            "View Mode",
+            ["Cards", "List", "Timeline"],
+            help="Choose how to display incidents"
+        )
+    with col2:
+        sort_by = st.selectbox(
+            "Sort By",
+            ["Newest First", "Oldest First", "Incident ID", "Title"],
+            help="Sort incidents by different criteria"
+        )
+    with col3:
+        status_filter = st.selectbox(
+            "Status",
+            ["All", "Complete", "Processing", "Failed"],
+            help="Filter by processing status"
+        )
+    with col4:
+        if st.button("🔍 Advanced Filters", use_container_width=True):
+            st.session_state.show_advanced_filters = not st.session_state.get("show_advanced_filters", False)
+
+    # Advanced filters (collapsible)
+    if st.session_state.get("show_advanced_filters", False):
+        with st.expander("Advanced Filters", expanded=True):
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                search_term = st.text_input("Search", placeholder="Search incidents, titles, or content...")
+            with col2:
+                date_range = st.date_input("Date Range", value=[], key="library_date_range")
+            with col3:
+                priority_filter = st.multiselect(
+                    "Priority",
+                    ["High", "Medium", "Low"],
+                    help="Filter by incident priority"
+                )
+
     # Filters
+    # Prepare filter data
     all_ids = [i.get("incident_id") for i in incidents]
     all_titles = sorted({i.get("title") for i in incidents if i.get("title")})
     people_dir = load_people_directory()
     all_people = sorted(list(people_dir.keys()))
 
-    with st.sidebar:
-        st.subheader("Filters")
-        st.session_state["filters"]["incident_ids"] = st.multiselect(
-            "Filter by Incident ID",
-            options=all_ids,
-            default=st.session_state["filters"].get("incident_ids", []),
-        )
-        st.session_state["filters"]["titles"] = st.multiselect(
-            "Filter by Title",
-            options=all_titles,
-            default=st.session_state["filters"].get("titles", []),
-        )
+    # Apply advanced filters if shown
+    search_term = st.session_state.get("search_term", "")
+    date_range = st.session_state.get("library_date_range", [])
+    priority_filter = st.session_state.get("priority_filter", [])
 
-        # Calendar widget showing dates with TRCs
-        if trc_dates_list:
-            min_date = min(trc_dates_list)
-            max_date = max(trc_dates_list)
-            selected_date = st.date_input(
-                "Select Date (shows dates with TRCs)",
-                value=None,
-                min_value=min_date,
-                max_value=max_date,
-                key="selected_date",
+    # Legacy sidebar filters (keep for backward compatibility but hide if advanced filters are active)
+    if not st.session_state.get("show_advanced_filters", False):
+        with st.sidebar:
+            st.subheader("Filters")
+            st.session_state["filters"]["incident_ids"] = st.multiselect(
+                "Filter by Incident ID",
+                options=all_ids,
+                default=st.session_state["filters"].get("incident_ids", []),
             )
-            # Highlight dates with TRCs
-            if selected_date and selected_date not in trc_dates:
-                st.warning("No TRCs found for selected date")
-        else:
-            selected_date = None
+            st.session_state["filters"]["titles"] = st.multiselect(
+                "Filter by Title",
+                options=all_titles,
+                default=st.session_state["filters"].get("titles", []),
+            )
 
-        st.session_state["filters"]["people"] = st.multiselect(
-            "Filter by People",
-            options=all_people,
-            default=st.session_state["filters"].get("people", []),
-        )
+            # Calendar widget showing dates with TRCs
+            if trc_dates_list:
+                min_date = min(trc_dates_list)
+                max_date = max(trc_dates_list)
+                selected_date = st.date_input(
+                    "Select Date (shows dates with TRCs)",
+                    value=None,
+                    min_value=min_date,
+                    max_value=max_date,
+                    key="selected_date",
+                )
+                # Highlight dates with TRCs
+                if selected_date and selected_date not in trc_dates:
+                    st.warning("No TRCs found for selected date")
+            else:
+                selected_date = None
+
+            st.session_state["filters"]["people"] = st.multiselect(
+                "Filter by People",
+                options=all_people,
+                default=st.session_state["filters"].get("people", []),
+            )
+    else:
+        # Use advanced filters
+        selected_date = None  # Advanced filters handle date filtering differently
 
     # Filter TRCs based on current filters
     filtered_trcs = []
@@ -725,7 +786,49 @@ def page_library() -> None:
         filtered_trcs.append(item)
 
     if not filtered_trcs:
-        st.info("No TRCs found matching the filters")
+        # Enhanced empty state
+        st.markdown("""
+        <div style="
+            text-align: center;
+            padding: 3rem;
+            background-color: #f8f9fa;
+            border-radius: 10px;
+            border: 2px dashed #dee2e6;
+        ">
+            <h3 style="color: #6c757d; margin-bottom: 1rem;">📭 No TRCs Found</h3>
+            <p style="color: #6c757d; margin-bottom: 2rem;">
+                No Technical Recovery Calls match your current filters.
+                Try adjusting your search criteria or upload some TRC files.
+            </p>
+        </div>
+        """, unsafe_allow_html=True)
+
+        # Quick actions for empty state
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            if st.button("📤 Upload TRCs", use_container_width=True):
+                st.session_state["page"] = "TRC Upload"
+                st.rerun()
+        with col2:
+            if st.button("🔄 Clear Filters", use_container_width=True):
+                st.session_state["filters"] = {
+                    "incident_ids": [],
+                    "titles": [],
+                    "people": [],
+                    "date_range": None,
+                }
+                st.rerun()
+        with col3:
+            if st.button("📊 View All", use_container_width=True):
+                # Reset all filters
+                st.session_state["filters"] = {
+                    "incident_ids": [],
+                    "titles": [],
+                    "people": [],
+                    "date_range": None,
+                }
+                st.session_state["show_advanced_filters"] = False
+                st.rerun()
         return
 
     # Group TRCs by date, then by incident
@@ -760,9 +863,20 @@ def page_library() -> None:
     if "Unknown Date" in incidents_by_date:
         sorted_dates.append("Unknown Date")
 
+    # Display incidents based on view mode
+    if view_mode == "Cards":
+        display_incidents_as_cards(sorted_dates, incidents_by_date)
+    elif view_mode == "List":
+        display_incidents_as_list(sorted_dates, incidents_by_date)
+    else:  # Timeline
+        display_incidents_as_timeline(sorted_dates, incidents_by_date)
+
+
+def display_incidents_as_cards(sorted_dates, incidents_by_date):
+    """Display incidents in a modern card-based layout."""
     for date_key in sorted_dates:
         if date_key == "Unknown Date":
-            st.subheader("Unknown Date")
+            st.markdown("### 📅 Unknown Date")
         else:
             # Format date nicely
             day_name = date_key.strftime("%A")
@@ -771,28 +885,524 @@ def page_library() -> None:
             month_name = date_key.strftime("%B")
             year = date_key.year
             date_display = f"{day_name} {day}{suffix} {month_name} {year}"
-            st.subheader(date_display)
+            st.markdown(f"### 📅 {date_display}")
 
         # Get incidents for this date
         date_incidents = incidents_by_date[date_key]
 
-        for _incident_id, incident_data in date_incidents.items():
+        # Create cards in a responsive grid
+        cols = st.columns(min(3, len(date_incidents)))
+        col_idx = 0
+
+        for incident_id, incident_data in date_incidents.items():
+            with cols[col_idx % len(cols)]:
+                display_incident_card(incident_id, incident_data)
+            col_idx += 1
+
+
+def display_incident_card(incident_id, incident_data):
+    """Display a single incident as a modern card."""
+    inc = incident_data["incident"]
+    trcs = incident_data["trcs"]
+
+    # Sort TRCs by time (oldest first)
+    trcs.sort(key=lambda t: t.get("start_time", ""))
+
+    # Get incident metadata
+    title = inc.get('title') or '(no title)'
+    master_summary = inc.get('master_summary', '')
+    trc_count = len(trcs)
+
+    # Determine status
+    has_errors = any(trc.get('pipeline_outputs', {}).get('error') for trc in trcs)
+    is_complete = all(trc.get('pipeline_outputs', {}).get('summarisation') for trc in trcs)
+
+    status_icon = "✅" if is_complete and not has_errors else "⚠️" if has_errors else "⏳"
+    status_color = "#28a745" if is_complete and not has_errors else "#ffc107" if has_errors else "#17a2b8"
+
+    # Card layout
+    st.markdown(f"""
+    <div style="
+        border: 1px solid #e9ecef;
+        border-radius: 10px;
+        padding: 1.5rem;
+        margin: 0.5rem 0;
+        background-color: white;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        transition: box-shadow 0.3s ease;
+    ">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem;">
+            <div>
+                <h4 style="margin: 0; color: #495057;">{incident_id}</h4>
+                <p style="margin: 0.5rem 0; color: #6c757d; font-size: 0.9rem;">{title}</p>
+            </div>
+            <div style="text-align: right;">
+                <div style="font-size: 1.5rem;">{status_icon}</div>
+                <div style="font-size: 0.8rem; color: {status_color};">{trc_count} TRC{trc_count != 1 and 's' or ''}</div>
+            </div>
+        </div>
+    """, unsafe_allow_html=True)
+
+    # Summary preview
+    if master_summary:
+        summary_preview = master_summary[:150] + "..." if len(master_summary) > 150 else master_summary
+        st.caption(f"📝 {summary_preview}")
+    else:
+        st.caption("📝 No summary available")
+
+    # Action buttons
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        if st.button("👁️ View Details", key=f"view_{incident_id}", use_container_width=True):
+            st.session_state[f"expand_{incident_id}"] = not st.session_state.get(f"expand_{incident_id}", False)
+    with col2:
+        if st.button("✏️ Edit", key=f"edit_{incident_id}", use_container_width=True):
+            st.session_state[f"edit_mode_{incident_id}"] = not st.session_state.get(f"edit_mode_{incident_id}", False)
+    with col3:
+        if st.button("📊 Export", key=f"export_{incident_id}", use_container_width=True):
+            st.info("Export feature coming soon!")
+
+    st.markdown("</div>", unsafe_allow_html=True)
+
+    # Expanded details
+    if st.session_state.get(f"expand_{incident_id}", False):
+        display_incident_details(incident_id, incident_data)
+
+    # Edit mode
+    if st.session_state.get(f"edit_mode_{incident_id}", False):
+        display_incident_editor(incident_id, incident_data)
+
+
+def display_incident_details(incident_id, incident_data):
+    """Display detailed view of an incident."""
+    inc = incident_data["incident"]
+    trcs = incident_data["trcs"]
+
+    with st.expander("Incident Details", expanded=True):
+        # Edit incident title and master summary
+        edit_title_key = f"edit_title_{incident_id}"
+        edit_ms_key = f"edit_ms_{incident_id}"
+        if edit_title_key not in st.session_state:
+            st.session_state[edit_title_key] = inc.get("title", "")
+        if edit_ms_key not in st.session_state:
+            st.session_state[edit_ms_key] = inc.get("master_summary", "")
+
+        # Handle revert flag
+        if st.session_state.pop(f"revert_flag_{incident_id}", False):
+            st.session_state[edit_title_key] = inc.get("title", "")
+            st.session_state[edit_ms_key] = inc.get("master_summary", "")
+
+        st.text_input("Title", key=edit_title_key)
+        st.text_area("Master Summary", height=200, key=edit_ms_key)
+
+        changed = st.session_state.get(edit_title_key, "") != inc.get(
+            "title", ""
+        ) or st.session_state.get(edit_ms_key, "") != inc.get("master_summary", "")
+        if changed:
+            col1, col2 = st.columns([6, 1])
+            with col2:
+                save_col, revert_col = st.columns(2)
+                with save_col:
+                    if st.button("Save Changes", key=f"save_inc_{incident_id}"):
+                        inc["title"] = st.session_state[edit_title_key]
+                        inc["master_summary"] = st.session_state[edit_ms_key]
+                        inc_path = INCIDENTS_DIR / f"{incident_id}.json"
+                        inc_path.write_text(json.dumps(inc, indent=2))
+                        st.success("Saved")
+                        st.rerun()
+                with revert_col:
+                    if st.button("Revert", key=f"revert_inc_{incident_id}"):
+                        st.session_state[f"revert_flag_{incident_id}"] = True
+                        st.rerun()
+
+        # TRC calls tabs
+        st.subheader("TRC Calls")
+        # Sort TRCs by start_time (oldest first)
+        trcs_sorted = sorted(trcs, key=lambda t: t.get("start_time", ""))
+
+        tab_labels = [
+            f"TRC {i + 1}: {_format_trc_datetime(t.get('start_time', ''))}"
+            for i, t in enumerate(trcs_sorted)
+        ]
+        trc_tabs = st.tabs(tab_labels)
+        for _idx, (trc_tab, trc) in enumerate(zip(trc_tabs, trcs_sorted, strict=False)):
+            with trc_tab:
+                # TRC details - keep existing pipeline details implementation
+                with st.expander("Pipeline Details", expanded=False):
+                    stage_tabs = st.tabs(
+                        [
+                            "transcription_parsing",
+                            "text_enhancement",
+                            "noise_reduction",
+                            "participant_analysis",
+                            "summarisation",
+                            "keyword_extraction",
+                            "master_summary_synthesis",
+                        ]
+                    )
+
+                    # Helper mapping for stage inputs
+                    input_key_map = {
+                        "transcription_parsing": "raw_vtt",
+                        "text_enhancement": "transcription_parsing",
+                        "noise_reduction": "text_enhancement",
+                        "participant_analysis": "noise_reduction",
+                        "summarisation": "noise_reduction",
+                        "keyword_extraction": "noise_reduction",
+                    }
+
+                    for _s, tab_stage in enumerate(
+                        [
+                            "transcription_parsing",
+                            "text_enhancement",
+                            "noise_reduction",
+                            "participant_analysis",
+                            "summarisation",
+                            "keyword_extraction",
+                            "master_summary_synthesis",
+                        ]
+                    ):
+                        with stage_tabs[_s]:
+                            in_col, out_col = st.columns(2)
+                            text_enhancement_diffs_data = None
+
+                            # Inputs
+                            with in_col:
+                                st.markdown("**Inputs**")
+                                if tab_stage == "master_summary_synthesis":
+                                    summaries = [
+                                        t.get("pipeline_outputs", {}).get(
+                                            "summarisation", ""
+                                        )
+                                        for t in inc.get("trcs", [])
+                                    ]
+                                    agg = "\n\n".join([s for s in summaries if s])
+                                    label_ms_in = f"summarisation (all TRCs) {_format_chars_and_size(agg)}"
+                                    st.text_area(
+                                        label_ms_in,
+                                        value=agg,
+                                        height=400,
+                                        disabled=True,
+                                        key=f"lib_in_ms_agg_{incident_id}_{trc['trc_id']}",
+                                    )
+                                else:
+                                    key = input_key_map.get(tab_stage)
+                                    if key:
+                                        val = trc.get("pipeline_outputs", {}).get(key, "")
+                                        if isinstance(val, (dict, list)):
+                                            st.json(val)
+                                        else:
+                                            label = f"{key} {_format_chars_and_size(val or '')}"
+                                            st.text_area(
+                                                label,
+                                                value=val or "",
+                                                height=400,
+                                                disabled=True,
+                                                key=f"lib_in_{tab_stage}_{key}_{incident_id}_{trc['trc_id']}",
+                                            )
+
+                            # Outputs
+                            with out_col:
+                                st.markdown("**Outputs**")
+                                if tab_stage == "master_summary_synthesis":
+                                    ms_text = inc.get("master_summary", "")
+                                    st.text_area(
+                                        f"master_summary {_format_chars_and_size(ms_text)}",
+                                        value=ms_text,
+                                        height=400,
+                                        disabled=True,
+                                        key=f"lib_out_ms_{incident_id}_{trc['trc_id']}_ms",
+                                    )
+                                    inc_art = inc.get("pipeline_artifacts", {}) or {}
+                                    ms_art = inc_art.get("master_summary_raw_llm_output")
+                                    if ms_art:
+                                        try:
+                                            with open(ms_art, encoding="utf-8") as f:
+                                                raw = f.read()
+                                            label_ms_raw = (
+                                                "master_summary_raw_llm_output "
+                                                f"{_format_chars_and_size(raw)}"
+                                            )
+                                            st.text_area(
+                                                label_ms_raw,
+                                                value=raw,
+                                                height=400,
+                                                disabled=True,
+                                                key=f"lib_ms_raw_{incident_id}_{trc['trc_id']}_raw",
+                                            )
+                                        except Exception:
+                                            st.caption(
+                                                "master_summary_raw_llm_output: (unavailable)"
+                                            )
+                                else:
+                                    po = trc.get("pipeline_outputs", {})
+                                    out_key = None
+                                    if tab_stage in (
+                                        "transcription_parsing",
+                                        "text_enhancement",
+                                        "noise_reduction",
+                                        "summarisation",
+                                    ):
+                                        out_key = (
+                                            tab_stage
+                                            if tab_stage != "summarisation"
+                                            else "summarisation"
+                                        )
+                                    elif tab_stage == "participant_analysis":
+                                        out_key = "participant_analysis"
+                                    elif tab_stage == "keyword_extraction":
+                                        out_key = "keywords"
+                                    if out_key and out_key in po:
+                                        val = po[out_key]
+                                        if isinstance(val, (dict, list)):
+                                            st.json(val)
+                                        else:
+                                            st.text_area(
+                                                f"{out_key} {_format_chars_and_size(val or '')}",
+                                                value=val or "",
+                                                height=400,
+                                                disabled=True,
+                                                key=f"lib_out_{out_key}_{incident_id}_{trc['trc_id']}",
+                                            )
+                                    arts = trc.get("pipeline_artifacts", {}) or {}
+                                    artifact_keys: list[str] = []
+                                    if tab_stage == "summarisation":
+                                        artifact_keys = ["summarisation_llm_output"]
+                                    elif tab_stage == "participant_analysis":
+                                        artifact_keys = [
+                                            "participant_analysis_llm_output",
+                                            "participant_analysis_llm_output_raw",
+                                        ]
+                                    elif tab_stage == "text_enhancement":
+                                        artifact_keys = ["text_enhancement_diffs"]
+                                    for ak in artifact_keys:
+                                        path = arts.get(ak)
+                                        if not path:
+                                            continue
+                                        try:
+                                            if (
+                                                ak.endswith("_raw")
+                                                or ak.endswith("_llm_output")
+                                                and path.endswith(".txt")
+                                            ) and path.endswith(".txt"):
+                                                with open(path, encoding="utf-8") as f:
+                                                    raw = f.read()
+                                                st.text_area(
+                                                    f"{ak} {_format_chars_and_size(raw)}",
+                                                    value=raw,
+                                                    height=400,
+                                                    disabled=True,
+                                                    key=f"lib_art_{ak}_{incident_id}_{trc['trc_id']}",
+                                                )
+                                            elif path.endswith(".json"):
+                                                with open(path, encoding="utf-8") as f:
+                                                    data = json.loads(f.read())
+                                                if ak == "text_enhancement_diffs":
+                                                    text_enhancement_diffs_data = data
+                                                else:
+                                                    st.json(data)
+                                        except Exception:
+                                            st.caption(f"{ak}: (unavailable)")
+
+                            # Display text enhancement diffs full-width if present
+                            if (
+                                text_enhancement_diffs_data
+                                and tab_stage == "text_enhancement"
+                            ):
+                                total_reps = text_enhancement_diffs_data.get(
+                                    "total_replacements", 0
+                                )
+                                changes = text_enhancement_diffs_data.get("changes", [])
+                                if changes:
+                                    st.markdown(f"**{total_reps} Replacements:**")
+                                    for i, change in enumerate(changes):
+                                        hhmm = change.get("hhmm", "N/A")
+                                        speaker = change.get("speaker", "N/A")
+                                        title = f"Change {i + 1}: {hhmm} - {speaker}"
+                                        with st.expander(title, expanded=False):
+                                            old_text = change.get("old_dialogue", "")
+                                            new_text = change.get("new_dialogue", "")
+                                            diff_viewer(
+                                                old_text=old_text, new_text=new_text
+                                            )
+                                elif not changes:
+                                    st.caption("No changes recorded")
+
+                    # Rerun controls
+                    st.divider()
+                    start_from = st.selectbox(
+                        "Rerun pipeline from:",
+                        options=[
+                            "Start",
+                            "transcription_parsing",
+                            "text_enhancement",
+                            "noise_reduction",
+                            "participant_analysis",
+                            "summarisation",
+                            "keyword_extraction",
+                        ],
+                        key=f"rerun_from_{incident_id}_{trc['trc_id']}",
+                    )
+                    if st.button("Go", key=f"rerun_{incident_id}_{trc['trc_id']}"):
+                        start_stage = None if start_from == "Start" else start_from
+                        raw_vtt = trc.get("pipeline_outputs", {}).get("raw_vtt", "")
+                        inc_id_val = inc.get("incident_id")
+                        start_time = trc.get("start_time")
+                        if not inc_id_val or not start_time:
+                            st.error(
+                                "Missing incident_id or start_time for this TRC; cannot rerun."
+                            )
+                        else:
+                            result = process_pipeline(
+                                raw_vtt,
+                                inc_id_val,
+                                start_time,
+                                start_stage=start_stage,
+                            )
+                            if result.success:
+                                st.success("Re-run completed")
+                            else:
+                                st.error(f"Re-run failed at stage {result.failed_stage}")
+
+
+def display_incident_editor(incident_id, incident_data):
+    """Display inline editor for incident details."""
+    inc = incident_data["incident"]
+
+    with st.expander("Edit Incident", expanded=True):
+        st.markdown("### Quick Edit")
+
+        # Title editor
+        new_title = st.text_input(
+            "Incident Title",
+            value=inc.get("title", ""),
+            key=f"quick_title_{incident_id}"
+        )
+
+        # Summary editor
+        new_summary = st.text_area(
+            "Master Summary",
+            value=inc.get("master_summary", ""),
+            height=150,
+            key=f"quick_summary_{incident_id}"
+        )
+
+        # Save/Cancel buttons
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("💾 Save Changes", key=f"quick_save_{incident_id}", use_container_width=True):
+                inc["title"] = new_title
+                inc["master_summary"] = new_summary
+                inc_path = INCIDENTS_DIR / f"{incident_id}.json"
+                inc_path.write_text(json.dumps(inc, indent=2))
+                st.success("Changes saved!")
+                st.session_state[f"edit_mode_{incident_id}"] = False
+                st.rerun()
+        with col2:
+            if st.button("❌ Cancel", key=f"quick_cancel_{incident_id}", use_container_width=True):
+                st.session_state[f"edit_mode_{incident_id}"] = False
+                st.rerun()
+
+
+def display_incidents_as_list(sorted_dates, incidents_by_date):
+    """Display incidents in a compact list format."""
+    st.markdown("### 📋 List View")
+
+    for date_key in sorted_dates:
+        if date_key == "Unknown Date":
+            st.markdown("#### 📅 Unknown Date")
+        else:
+            day_name = date_key.strftime("%A")
+            day = date_key.day
+            suffix = "th" if 11 <= day <= 13 else {1: "st", 2: "nd", 3: "rd"}.get(day % 10, "th")
+            month_name = date_key.strftime("%B")
+            year = date_key.year
+            date_display = f"{day_name} {day}{suffix} {month_name} {year}"
+            st.markdown(f"#### 📅 {date_display}")
+
+        date_incidents = incidents_by_date[date_key]
+
+        for incident_id, incident_data in date_incidents.items():
+            inc = incident_data["incident"]
+            trcs = incident_data["trcs"]
+            trc_count = len(trcs)
+
+            # Determine status
+            has_errors = any(trc.get('pipeline_outputs', {}).get('error') for trc in trcs)
+            is_complete = all(trc.get('pipeline_outputs', {}).get('summarisation') for trc in trcs)
+            status_icon = "✅" if is_complete and not has_errors else "⚠️" if has_errors else "⏳"
+
+            # List item
+            col1, col2, col3, col4 = st.columns([2, 4, 1, 1])
+            with col1:
+                st.markdown(f"**{incident_id}**")
+            with col2:
+                title = inc.get('title') or '(no title)'
+                st.markdown(f"{title}")
+            with col3:
+                st.markdown(f"{status_icon} {trc_count} TRC{trc_count != 1 and 's' or ''}")
+            with col4:
+                if st.button("View", key=f"list_view_{incident_id}"):
+                    st.session_state[f"expand_{incident_id}"] = not st.session_state.get(f"expand_{incident_id}", False)
+
+            # Expanded details
+            if st.session_state.get(f"expand_{incident_id}", False):
+                display_incident_details(incident_id, incident_data)
+
+
+def display_incidents_as_timeline(sorted_dates, incidents_by_date):
+    """Display incidents in a timeline format."""
+    st.markdown("### ⏰ Timeline View")
+
+    # Create timeline
+    for date_key in sorted_dates:
+        if date_key == "Unknown Date":
+            st.markdown("#### 📅 Unknown Date")
+        else:
+            day_name = date_key.strftime("%A")
+            day = date_key.day
+            suffix = "th" if 11 <= day <= 13 else {1: "st", 2: "nd", 3: "rd"}.get(day % 10, "th")
+            month_name = date_key.strftime("%B")
+            year = date_key.year
+            date_display = f"{day_name} {day}{suffix} {month_name} {year}"
+            st.markdown(f"#### 📅 {date_display}")
+
+        date_incidents = incidents_by_date[date_key]
+
+        for incident_id, incident_data in date_incidents.items():
             inc = incident_data["incident"]
             trcs = incident_data["trcs"]
 
-            # Sort TRCs by time (oldest first)
-            trcs.sort(key=lambda t: t.get("start_time", ""))
+            # Timeline item
+            st.markdown(f"""
+            <div style="
+                border-left: 3px solid #007bff;
+                padding-left: 1rem;
+                margin: 1rem 0;
+                position: relative;
+            ">
+                <div style="
+                    position: absolute;
+                    left: -8px;
+                    top: 0;
+                    width: 14px;
+                    height: 14px;
+                    background-color: #007bff;
+                    border-radius: 50%;
+                "></div>
+                <h5 style="margin: 0; color: #007bff;">{incident_id}</h5>
+                <p style="margin: 0.5rem 0; color: #6c757d;">{inc.get('title') or '(no title)'}</p>
+                <small style="color: #6c757d;">{len(trcs)} TRC call{len(trcs) != 1 and 's' or ''}</small>
+            </div>
+            """, unsafe_allow_html=True)
 
-            # Use the most recent TRC time for the incident display
-            try:
-                latest_trc = trcs[-1]  # Last in sorted list (most recent)
-                dt = datetime.fromisoformat(latest_trc.get("start_time", "").replace("Z", "+00:00"))
-                time_str = dt.strftime("%H:%M")
-            except Exception:
-                time_str = "Unknown"
+            # Expand button
+            if st.button(f"View Details for {incident_id}", key=f"timeline_view_{incident_id}"):
+                st.session_state[f"expand_{incident_id}"] = not st.session_state.get(f"expand_{incident_id}", False)
 
-            title = f"{inc.get('incident_id')} - {time_str} - {inc.get('title') or '(no title)'}"
-            with st.expander(title, expanded=False):
+            # Expanded details
+            if st.session_state.get(f"expand_{incident_id}", False):
+                display_incident_details(incident_id, incident_data)
                 # Edit incident title and master summary
                 edit_title_key = f"edit_title_{inc['incident_id']}"
                 edit_ms_key = f"edit_ms_{inc['incident_id']}"
