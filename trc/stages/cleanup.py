@@ -17,8 +17,12 @@ class VTTDialogueSegment(TypedDict):
 
 
 class CleanupStage:
-    name = "cleanup"
+    name = "vtt_cleanup"
     requires = ["raw_vtt"]
+
+    # If VTT offsets roll over (e.g., after hours or across midnight),
+    # add this fixed amount when a decrease is detected.
+    FOUR_HOURS_TD = timedelta(hours=4)
 
     _vtt_timestamp_cue_pattern = re.compile(
         r"^\s*(\d{2}:\d{2}:\d{2}\.\d{3})\s*-->\s*(\d{2}:\d{2}:\d{2}\.\d{3})"
@@ -32,7 +36,7 @@ class CleanupStage:
         raw_vtt_content = ctx.trc.get("pipeline_outputs", {}).get("raw_vtt", "")
         if not raw_vtt_content:
             return StageOutput(
-                trc_outputs={"cleanup": ""},
+                trc_outputs={"vtt_cleanup": ""},
                 input_info="Input: 0 chars",
                 output_info="Output: 0 chars",
             )
@@ -52,7 +56,7 @@ class CleanupStage:
         if not raw_segments:
             logger.info("No dialogue segments parsed from VTT content.")
             return StageOutput(
-                trc_outputs={"cleanup": ""},
+                trc_outputs={"vtt_cleanup": ""},
                 input_info=f"Input: {len(raw_vtt_content)} chars",
                 output_info="Output: 0 chars",
             )
@@ -60,6 +64,11 @@ class CleanupStage:
         consolidated: list[dict[str, Any]] = []
         last_minute_key: int | None = None
         last_speaker: str | None = None
+
+        # For computing real timestamps from meeting start time
+        meeting_start_dt = ctx.start_dt
+        last_vtt_offset_td: timedelta | None = None
+        current_total_rollover_offset = timedelta(0)
 
         for seg in raw_segments:
             speaker = self._normalize_speaker_name(seg.get("raw_speaker", "") or "Unknown Speaker")
@@ -86,26 +95,71 @@ class CleanupStage:
             if not dialogue or not any(ch.isalnum() for ch in dialogue):
                 continue
 
-            td = self._parse_vtt_timestamp_to_timedelta(
+            # Parse the VTT timestamp to an offset timedelta
+            current_vtt_offset_td = self._parse_vtt_timestamp_to_timedelta(
                 seg.get("vtt_timestamp_str", "00:00:00.000")
-            ) or timedelta(0)
-            total_seconds = int(td.total_seconds())
-            minute_key = total_seconds // 60
-            hh = total_seconds // 3600
-            mm = (total_seconds % 3600) // 60
-            hhmm = f"{hh:02d}:{mm:02d}"
+            )
+
+            display_dt = None
+            if current_vtt_offset_td is None:
+                # Invalid cue time: keep continuity if we already have a timestamp
+                logger.warning(
+                    "Invalid VTT timestamp %r, using previous/meeting start time.",
+                    seg.get("vtt_timestamp_str"),
+                )
+                if consolidated and consolidated[-1].get("display_dt") is not None:
+                    display_dt = consolidated[-1]["display_dt"]
+                else:
+                    display_dt = meeting_start_dt
+                # Use zero for grouping fallback
+                current_vtt_offset_td = timedelta(0)
+            else:
+                # Detect rollover (VTT offset decreased), add a fixed adjustment window
+                if last_vtt_offset_td is not None and current_vtt_offset_td < last_vtt_offset_td:
+                    current_total_rollover_offset += self.FOUR_HOURS_TD
+                    logger.debug(
+                        "VTT time rollover detected. Prev: %s Curr: %s Total adjustment: %s",
+                        last_vtt_offset_td,
+                        current_vtt_offset_td,
+                        current_total_rollover_offset,
+                    )
+                # Compute real display dt if meeting start is known
+                if meeting_start_dt is not None:
+                    actual_offset = current_vtt_offset_td + current_total_rollover_offset
+                    display_dt = meeting_start_dt + actual_offset
+                last_vtt_offset_td = current_vtt_offset_td
+
+            # Determine grouping minute key and HH:MM label
+            if display_dt is not None:
+                # Group by absolute minute; use epoch minutes as key
+                minute_key = int(display_dt.timestamp() // 60)
+                hhmm = display_dt.strftime("%H:%M")
+            else:
+                # Fallback to offset-based grouping/label
+                total_seconds = int(current_vtt_offset_td.total_seconds())
+                minute_key = total_seconds // 60
+                hh = total_seconds // 3600
+                mm = (total_seconds % 3600) // 60
+                hhmm = f"{hh:02d}:{mm:02d}"
 
             # Consolidate consecutive lines for same speaker within same minute
             if consolidated and last_speaker == speaker and last_minute_key == minute_key:
                 consolidated[-1]["text"] += " " + dialogue
             else:
-                consolidated.append({"hhmm": hhmm, "speaker": speaker, "text": dialogue})
+                consolidated.append(
+                    {
+                        "hhmm": hhmm,
+                        "speaker": speaker,
+                        "text": dialogue,
+                        "display_dt": display_dt,
+                    }
+                )
                 last_speaker = speaker
                 last_minute_key = minute_key
 
         if not consolidated:
             return StageOutput(
-                trc_outputs={"cleanup": ""},
+                trc_outputs={"vtt_cleanup": ""},
                 input_info=f"Input: {len(raw_vtt_content)} chars",
                 output_info="Output: 0 chars",
             )
@@ -127,7 +181,7 @@ class CleanupStage:
 
         out_text = "\n".join(out_lines)
         return StageOutput(
-            trc_outputs={"cleanup": out_text},
+            trc_outputs={"vtt_cleanup": out_text},
             input_info=f"Input: {len(raw_vtt_content)} chars",
             output_info=f"Output: {len(out_text)} chars",
         )

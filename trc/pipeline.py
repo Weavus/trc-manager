@@ -146,7 +146,7 @@ def load_stage_registry() -> tuple[dict[str, Stage], dict[str, dict[str, Any]]]:
         CONFIG_PATH,
         {
             "pipeline_order": [
-                "cleanup",
+                "vtt_cleanup",
                 "refinement",
                 "people_extraction",
                 "summarisation",
@@ -156,7 +156,7 @@ def load_stage_registry() -> tuple[dict[str, Stage], dict[str, dict[str, Any]]]:
             "stages": {
                 s: {"enabled": True, "params": {}}
                 for s in [
-                    "cleanup",
+                    "vtt_cleanup",
                     "refinement",
                     "people_extraction",
                     "summarisation",
@@ -271,7 +271,7 @@ def process_pipeline(
         CONFIG_PATH,
         {
             "pipeline_order": [
-                "cleanup",
+                "vtt_cleanup",
                 "refinement",
                 "people_extraction",
                 "summarisation",
@@ -281,7 +281,7 @@ def process_pipeline(
             "stages": {
                 s: {"enabled": True, "params": {}}
                 for s in [
-                    "cleanup",
+                    "vtt_cleanup",
                     "refinement",
                     "people_extraction",
                     "summarisation",
