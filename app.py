@@ -97,7 +97,7 @@ def sidebar_nav() -> None:
         # Navigation sections
         nav_items = [
             {
-                "name": "TRC Upload",
+                "name": "Transcript Upload",
                 "icon": "📤",
                 "description": "Upload and process transcript files",
                 "badge": None
@@ -179,7 +179,7 @@ def page_upload() -> None:
     # Page header with improved styling and metrics
     col1, col2 = st.columns([3, 1])
     with col1:
-        st.markdown("# 📤 TRC Upload")
+        st.markdown("# 📤 Transcript Upload")
         st.markdown("*Upload and process Technical Recovery Call transcripts*")
     with col2:
         # Quick stats
@@ -2611,7 +2611,7 @@ def main() -> None:
     sidebar_nav()
 
     page = st.session_state["page"]
-    if page == "TRC Upload":
+    if page == "Transcript Upload":
         page_upload()
     elif page == "TRC Library":
         page_library()
