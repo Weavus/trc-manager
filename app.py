@@ -22,6 +22,21 @@ from trc.pipeline import (
 )
 
 
+def _format_chars_and_size(text: str) -> str:
+    try:
+        chars = len(text or "")
+        bytes_len = len((text or "").encode("utf-8"))
+        if bytes_len >= 1024 * 1024:
+            size = f"{int(round(bytes_len / (1024 * 1024)))} MB"
+        elif bytes_len >= 1024:
+            size = f"{int(round(bytes_len / 1024))} KB"
+        else:
+            size = f"{bytes_len} B"
+        return f"{chars:,} characters ({size})"
+    except Exception:
+        return ""
+
+
 def init_state() -> None:
     st.session_state.setdefault("page", "TRC Upload")
     st.session_state.setdefault(
@@ -69,9 +84,7 @@ def page_upload() -> None:
         content = up.read()
         inc_id, dt_token = parse_filename_info(name)
         if not inc_id or not dt_token:
-            st.error(
-                "Error: Filename must include INC id and DDMMYYYY-HHMM time."
-            )
+            st.error("Error: Filename must include INC id and DDMMYYYY-HHMM time.")
             continue
 
         # derive ISO time from ddmmyyyy-hhmm
@@ -90,28 +103,61 @@ def page_upload() -> None:
         match = next((t for t in trcs if t.get("start_time") == start_iso), None)
         new_hash = __import__("hashlib").sha256(content).hexdigest()
 
+        go = True
+        # Overwrite handling
         if match:
             old_hash = match.get("file_hash")
             if old_hash and old_hash == new_hash:
-                st.warning(
-                    f"This file for {inc_id} at {start_iso} already processed."
-                )
-                continue
+                st.warning(f"An identical TRC for {inc_id} at {start_iso} already exists.")
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.button(
+                        f"Proceed and overwrite {inc_id} {start_iso}",
+                        key=f"overwrite_same_{inc_id}_{start_iso}_{name}",
+                    ):
+                        go = True
+                with col2:
+                    if st.button(
+                        f"Cancel {inc_id} {start_iso}",
+                        key=f"cancel_same_{inc_id}_{start_iso}_{name}",
+                    ):
+                        go = False
+                if not go:
+                    continue
             else:
                 st.warning(
-                    f"Different TRC file for {inc_id} at {start_iso} exists. "
+                    f"A different TRC for {inc_id} at {start_iso} already exists. "
                     "Overwrite and re-process?"
                 )
                 col1, col2 = st.columns(2)
                 go = False
                 with col1:
-                    if st.button(f"Overwrite {inc_id} {start_iso}"):
+                    if st.button(
+                        f"Overwrite {inc_id} {start_iso}",
+                        key=f"overwrite_diff_{inc_id}_{start_iso}_{name}",
+                    ):
                         go = True
                 with col2:
-                    if st.button(f"Cancel {inc_id} {start_iso}"):
+                    if st.button(
+                        f"Cancel {inc_id} {start_iso}",
+                        key=f"cancel_diff_{inc_id}_{start_iso}_{name}",
+                    ):
                         go = False
                 if not go:
                     continue
+            # If overwriting existing TRC, update raw_vtt and file_hash before processing
+            try:
+                inc_doc = existing if existing else json.loads(inc_path.read_text())
+            except Exception:
+                inc_doc = existing
+            for t in inc_doc.get("trcs", []):
+                if t.get("start_time") == start_iso:
+                    t.setdefault("pipeline_outputs", {})["raw_vtt"] = content.decode(
+                        "utf-8", errors="ignore"
+                    )
+                    t["file_hash"] = new_hash
+                    break
+            inc_path.write_text(json.dumps(inc_doc, indent=2))
 
         # Save upload
         upload_dir = DATA_DIR / "uploads" / inc_id
@@ -139,6 +185,20 @@ def page_upload() -> None:
 
             # Stage logs expanders
             st.subheader("Pipeline Stages")
+            # Load fresh incident + trc for displaying inputs/outputs
+            inc_view = json.loads(inc_path.read_text())
+            trc_view = next(t for t in inc_view.get("trcs", []) if t.get("trc_id") == result.trc_id)
+
+            # Helper mapping for stage input/output keys
+            input_key_map: dict[str, str] = {
+                "cleanup": "raw_vtt",
+                "refinement": "cleanup",
+                "people_extraction": "refinement",
+                "summarisation": "refinement",
+                "keyword_extraction": "refinement",
+                "master_summary": "summarisation",
+            }
+
             for log in result.stage_logs:
                 prefix = (
                     "✅ "
@@ -147,12 +207,150 @@ def page_upload() -> None:
                 )
                 title = prefix + f"{log.name}"
                 with st.expander(title, expanded=False):
-                    st.text(f"Time taken: {log.duration_s:.2f}s")
-                    st.text(f"Status: {log.status}")
-                    if log.input_info:
-                        st.text(log.input_info)
-                    if log.output_info:
-                        st.text(log.output_info)
+                    c1, c2, c3 = st.columns(3)
+                    with c1:
+                        st.text(f"Status: {log.status}")
+                    with c2:
+                        st.text(f"Duration: {log.duration_s:.2f}s")
+                    with c3:
+                        st.text(f"Messages: {len(log.messages)}")
+
+                    in_col, out_col = st.columns(2)
+                    stage = log.name
+
+                    # Inputs
+                    with in_col:
+                        st.markdown("**Inputs**")
+                        if stage == "master_summary":
+                            # Aggregate summaries across TRCs as input preview
+                            summaries = [
+                                t.get("pipeline_outputs", {}).get("summarisation", "")
+                                for t in inc_view.get("trcs", [])
+                            ]
+                            agg = "\n\n".join([s for s in summaries if s])
+                            label_ms_in = f"summarisation (all TRCs) {_format_chars_and_size(agg)}"
+                            st.text_area(
+                                label_ms_in,
+                                value=agg,
+                                height=400,
+                                disabled=True,
+                            )
+                            with st.expander("Copy summarisation (all TRCs)"):
+                                st.code(agg)
+                        else:
+                            key = input_key_map.get(stage)
+                            if key:
+                                val = trc_view.get("pipeline_outputs", {}).get(key, "")
+                                if isinstance(val, (dict, list)):
+                                    st.json(val)
+                                    with st.expander(f"Copy {key} (JSON)"):
+                                        st.code(json.dumps(val, indent=2))
+                                else:
+                                    label = f"{key} {_format_chars_and_size(val or '')}"
+                                    st.text_area(label, value=val or "", height=400, disabled=True)
+                                    with st.expander(f"Copy {key}"):
+                                        st.code(val or "")
+
+                    # Outputs
+                    with out_col:
+                        st.markdown("**Outputs**")
+                        if stage == "master_summary":
+                            ms_text = inc_view.get("master_summary", "")
+                            st.text_area(
+                                f"master_summary {_format_chars_and_size(ms_text)}",
+                                value=ms_text,
+                                height=400,
+                                disabled=True,
+                            )
+                            with st.expander("Copy master_summary"):
+                                st.code(ms_text)
+
+                            # Incident-level artifacts
+                            inc_art = inc_view.get("pipeline_artifacts", {}) or {}
+                            ms_art = inc_art.get("master_summary_raw_llm_output")
+                            if ms_art:
+                                try:
+                                    with open(ms_art, encoding="utf-8") as f:
+                                        raw = f.read()
+                                    label_ms_raw = (
+                                        "master_summary_raw_llm_output "
+                                        f"{_format_chars_and_size(raw)}"
+                                    )
+                                    st.text_area(
+                                        label_ms_raw,
+                                        value=raw,
+                                        height=400,
+                                        disabled=True,
+                                    )
+                                    with st.expander("Copy master_summary_raw_llm_output"):
+                                        st.code(raw)
+                                except Exception:
+                                    st.caption("master_summary_raw_llm_output: (unavailable)")
+                        else:
+                            po = trc_view.get("pipeline_outputs", {})
+                            # primary outputs per stage
+                            out_key = None
+                            if stage in ("cleanup", "refinement", "summarisation"):
+                                out_key = stage if stage != "summarisation" else "summarisation"
+                            elif stage == "people_extraction":
+                                out_key = "people_extraction"
+                            elif stage == "keyword_extraction":
+                                out_key = "keywords"
+
+                            if out_key and out_key in po:
+                                val = po[out_key]
+                                if isinstance(val, (dict, list)):
+                                    st.json(val)
+                                    with st.expander(f"Copy {out_key} (JSON)"):
+                                        st.code(json.dumps(val, indent=2))
+                                else:
+                                    st.text_area(
+                                        f"{out_key} {_format_chars_and_size(val or '')}",
+                                        value=val or "",
+                                        height=400,
+                                        disabled=True,
+                                    )
+                                    with st.expander(f"Copy {out_key}"):
+                                        st.code(val or "")
+
+                            # Show stage artifacts if present
+                            arts = trc_view.get("pipeline_artifacts", {}) or {}
+                            artifact_keys: list[str] = []
+                            if stage == "summarisation":
+                                artifact_keys = ["summarisation_llm_output"]
+                            elif stage == "people_extraction":
+                                artifact_keys = [
+                                    "people_extraction_llm_output",
+                                    "people_extraction_llm_output_raw",
+                                ]
+                            for ak in artifact_keys:
+                                path = arts.get(ak)
+                                if not path:
+                                    continue
+                                try:
+                                    if (
+                                        ak.endswith("_raw") or ak.endswith("_llm_output")
+                                    ) and path.endswith(".txt"):
+                                        with open(path, encoding="utf-8") as f:
+                                            raw = f.read()
+                                        st.text_area(
+                                            f"{ak} {_format_chars_and_size(raw)}",
+                                            value=raw,
+                                            height=400,
+                                            disabled=True,
+                                        )
+                                        with st.expander(f"Copy {ak}"):
+                                            st.code(raw)
+                                    elif path.endswith(".json"):
+                                        with open(path, encoding="utf-8") as f:
+                                            data = json.loads(f.read())
+                                        st.json(data)
+                                        with st.expander(f"Copy {ak} (JSON)"):
+                                            st.code(json.dumps(data, indent=2))
+                                except Exception:
+                                    st.caption(f"{ak}: (unavailable)")
+
+                    # Any log messages
                     for m in log.messages:
                         st.info(m)
             if not result.success:
@@ -252,35 +450,52 @@ def page_library() -> None:
     for inc in filtered:
         title = f"{inc.get('incident_id')}: {inc.get('title') or '(no title)'}"
         with st.expander(title, expanded=False):
-            new_title = st.text_input(
-                "Incident Title", value=inc.get("title", ""), key=f"title_{inc['incident_id']}"
-            )
-            if st.button("Save Title", key=f"save_title_{inc['incident_id']}"):
-                inc["title"] = new_title
-                (INCIDENTS_DIR / f"{inc['incident_id']}.json").write_text(
-                    json.dumps(inc, indent=2)
-                )
-                st.success("Title saved")
+            orig_title = inc.get("title", "")
+            title_key = f"title_{inc['incident_id']}"
+            new_title = st.text_input("Incident Title", value=orig_title, key=title_key)
+            if new_title != orig_title:
+                c1, c2 = st.columns(2)
+                with c1:
+                    if st.button("Save Title", key=f"save_title_{inc['incident_id']}"):
+                        inc["title"] = new_title
+                        inc_path = INCIDENTS_DIR / f"{inc['incident_id']}.json"
+                        inc_path.write_text(json.dumps(inc, indent=2))
+                        st.success("Title saved")
+                with c2:
+                    if st.button("Revert", key=f"revert_title_{inc['incident_id']}"):
+                        st.session_state[title_key] = orig_title
+                        st.info("Reverted")
+                        st.rerun()
 
+            orig_ms = inc.get("master_summary", "")
+            ms_key = f"ms_{inc['incident_id']}"
             ms = st.text_area(
                 "Master Summary",
-                value=inc.get("master_summary", ""),
-                key=f"ms_{inc['incident_id']}",
+                value=orig_ms,
+                key=ms_key,
                 height=250,
             )
-            if st.button("Save Master Summary", key=f"save_ms_{inc['incident_id']}"):
-                inc["master_summary"] = ms
-                (INCIDENTS_DIR / f"{inc['incident_id']}.json").write_text(
-                    json.dumps(inc, indent=2)
-                )
-                st.success("Master Summary saved")
+            if ms != orig_ms:
+                c1, c2 = st.columns(2)
+                with c1:
+                    if st.button("Save Master Summary", key=f"save_ms_{inc['incident_id']}"):
+                        inc["master_summary"] = ms
+                        (INCIDENTS_DIR / f"{inc['incident_id']}.json").write_text(
+                            json.dumps(inc, indent=2)
+                        )
+                        st.success("Master Summary saved")
+                with c2:
+                    if st.button("Revert", key=f"revert_ms_{inc['incident_id']}"):
+                        st.session_state[ms_key] = orig_ms
+                        st.info("Reverted")
+                        st.rerun()
 
             st.subheader("TRC Calls")
             trcs = inc.get("trcs", [])
             if not trcs:
                 st.info("No TRCs for this incident")
                 continue
-            tab_labels = [f"Call {i+1}: {t.get('start_time')}" for i, t in enumerate(trcs)]
+            tab_labels = [f"Call {i + 1}: {t.get('start_time')}" for i, t in enumerate(trcs)]
             tabs = st.tabs(tab_labels)
             for _idx, (tab, trc) in enumerate(zip(tabs, trcs, strict=False)):
                 with tab:
@@ -289,15 +504,24 @@ def page_library() -> None:
                     )
                     with subtabs[0]:
                         summary_val = trc.get("pipeline_outputs", {}).get("summarisation", "")
+                        sum_key = f"sum_{trc['trc_id']}"
                         new_sum = st.text_area(
-                            "TRC Summary", value=summary_val, key=f"sum_{trc['trc_id']}", height=300
+                            "TRC Summary", value=summary_val, key=sum_key, height=300
                         )
-                        if st.button("Save Summary", key=f"save_sum_{trc['trc_id']}"):
-                            trc["pipeline_outputs"]["summarisation"] = new_sum
-                            (INCIDENTS_DIR / f"{inc['incident_id']}.json").write_text(
-                                json.dumps(inc, indent=2)
-                            )
-                            st.success("Summary saved")
+                        if new_sum != summary_val:
+                            c1, c2 = st.columns(2)
+                            with c1:
+                                if st.button("Save Summary", key=f"save_sum_{trc['trc_id']}"):
+                                    trc["pipeline_outputs"]["summarisation"] = new_sum
+                                    (INCIDENTS_DIR / f"{inc['incident_id']}.json").write_text(
+                                        json.dumps(inc, indent=2)
+                                    )
+                                    st.success("Summary saved")
+                            with c2:
+                                if st.button("Revert", key=f"revert_sum_{trc['trc_id']}"):
+                                    st.session_state[sum_key] = summary_val
+                                    st.info("Reverted")
+                                    st.rerun()
                     with subtabs[1]:
                         st.text_area(
                             "Refined",
@@ -388,9 +612,7 @@ def page_people() -> None:
         return True
 
     filtered = [
-        dict(p, raw_name=k)
-        for k, p in directory.items()
-        if person_matches(dict(p, raw_name=k))
+        dict(p, raw_name=k) for k, p in directory.items() if person_matches(dict(p, raw_name=k))
     ]
 
     if not filtered:
@@ -399,20 +621,30 @@ def page_people() -> None:
 
     for person in filtered:
         with st.expander(person.get("display_name") or person.get("raw_name")):
-            dn = st.text_input(
-                "Display Name", value=person.get("display_name", ""), key=f"dn_{person['raw_name']}"
-            )
+            orig_dn = person.get("display_name", "")
+            orig_ro = person.get("role_override") or ""
+            dn_key = f"dn_{person['raw_name']}"
+            ro_key = f"ro_{person['raw_name']}"
+            dn = st.text_input("Display Name", value=orig_dn, key=dn_key)
             ro = st.text_input(
                 "Canonical Role (Override)",
-                value=person.get("role_override") or "",
-                key=f"ro_{person['raw_name']}",
+                value=orig_ro,
+                key=ro_key,
             )
-            if st.button("Save Changes", key=f"save_p_{person['raw_name']}"):
-                directory[person["raw_name"]]["display_name"] = dn
-                directory[person["raw_name"]]["role_override"] = ro or None
-                save_people_directory(directory)
-                st.success("Saved")
-
+            if dn != orig_dn or ro != orig_ro:
+                c1, c2 = st.columns(2)
+                with c1:
+                    if st.button("Save Changes", key=f"save_p_{person['raw_name']}"):
+                        directory[person["raw_name"]]["display_name"] = dn
+                        directory[person["raw_name"]]["role_override"] = ro or None
+                        save_people_directory(directory)
+                        st.success("Saved")
+                with c2:
+                    if st.button("Revert", key=f"revert_p_{person['raw_name']}"):
+                        st.session_state[dn_key] = orig_dn
+                        st.session_state[ro_key] = orig_ro
+                        st.info("Reverted")
+                        st.rerun()
 
             tabs = st.tabs(["Discovered Roles", "Discovered Knowledge"])
             with tabs[0]:
@@ -515,9 +747,7 @@ def page_config() -> None:
     # Manual reordering via selectboxes
     new_order: list[str] = []
     for i, _s in enumerate(order):
-        new_order.append(
-            st.selectbox(f"Position {i+1}", options=order, index=i, key=f"ord_{i}")
-        )
+        new_order.append(st.selectbox(f"Position {i + 1}", options=order, index=i, key=f"ord_{i}"))
     if len(set(new_order)) == len(order):
         cfg["pipeline_order"] = new_order
 
@@ -549,6 +779,8 @@ def page_config() -> None:
 
 def main() -> None:
     setup_logging()
+    # Use full-width layout
+    st.set_page_config(page_title="TRC Manager", layout="wide")
     init_state()
     sidebar_nav()
 

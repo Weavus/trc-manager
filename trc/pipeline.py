@@ -1,13 +1,17 @@
 from __future__ import annotations
 
-import hashlib
+import importlib
 import json
 import logging
 import re
 import time
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+from .stages import get_builtin_registry
+from .stages.base import RunContext, Stage, StageOutput
 
 DATA_DIR = Path("data")
 INCIDENTS_DIR = DATA_DIR / "incidents"
@@ -15,12 +19,24 @@ PEOPLE_DIR = DATA_DIR / "people"
 UPLOADS_DIR = DATA_DIR / "uploads"
 ARTIFACTS_DIR = DATA_DIR / "artifacts"
 CONFIG_PATH = Path("config.json")
+STAGES_PATH = Path("stages.json")
 PEOPLE_PATH = PEOPLE_DIR / "people_directory.json"
 
 LOGGER = logging.getLogger("trc.pipeline")
 
 INC_REGEX = re.compile(r"(INC\d{10,12})")
 DT_REGEX = re.compile(r"(?<!\d)(\d{8}-\d{4})(?!\d)")
+
+
+def _parse_iso_datetime_safe(s: str) -> datetime | None:
+    try:
+        if s and s.endswith("Z"):
+            return datetime.strptime(s, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=timezone.utc)
+        if s:
+            return datetime.fromisoformat(s)
+    except Exception:
+        return None
+    return None
 
 
 @dataclass
@@ -44,86 +60,8 @@ def setup_logging(log_path: Path = Path("app.log")) -> None:
     )
 
 
-# 4.2 Pipeline Stages (Placeholders)
-
-def stage_cleanup(raw_vtt_content: str) -> str:
-    # Placeholder: strip VTT cues and timestamps very naively
-    lines = []
-    for line in raw_vtt_content.splitlines():
-        if re.match(r"^\d{2}:\d{2}:\d{2}\.\d{3} --> ", line):
-            continue
-        if line.strip().upper() in {"WEBVTT", "NOTE"}:
-            continue
-        if line.strip() == "":
-            continue
-        lines.append(line)
-    return " ".join(lines)
-
-
-def stage_refinement(cleaned_text: str) -> str:
-    # Placeholder: collapse whitespace and simple fixes
-    text = re.sub(r"\s+", " ", cleaned_text).strip()
-    return text
-
-
-def stage_people_extraction(refined_text: str) -> tuple[dict[str, Any], str]:
-    # Placeholder: no LLM. Extract capitalized word pairs as names
-    names = set(re.findall(r"([A-Z][a-z]+\s+[A-Z][a-z]+)", refined_text))
-    roles = []
-    knowledge = []
-    for n in names:
-        raw = n.lower()
-        roles.append({
-            "raw_name": raw,
-            "display_name": n,
-            "role": "Participant",
-            "reasoning": "Heuristic extraction placeholder.",
-            "confidence_score": 5.0,
-        })
-        knowledge.append({
-            "raw_name": raw,
-            "display_name": n,
-            "knowledge": "General TRC context",
-            "reasoning": "Heuristic extraction placeholder.",
-            "confidence_score": 4.0,
-        })
-    payload = {"roles": roles, "knowledge": knowledge}
-    raw_llm_output = json.dumps(payload, indent=2)
-    return payload, raw_llm_output
-
-
-def stage_summarisation(
-    refined_text: str,
-    current_incident_title: str | None,
-) -> tuple[str | None, str, str]:
-    # Placeholder: first sentence as title if not present
-    title = None
-    if not current_incident_title:
-        title = (refined_text[:60] + "...") if len(refined_text) > 60 else refined_text
-    summary = (
-        f"{title or current_incident_title or 'Incident'} - Summary:\n\n"
-        + refined_text[:2000]
-    )
-    raw = summary
-    return title, summary, raw
-
-
-def stage_keyword_extraction(refined_text: str) -> list[str]:
-    # Placeholder: top 5 frequent words > 5 chars
-    words = re.findall(r"[a-zA-Z]{6,}", refined_text.lower())
-    freq: dict[str, int] = {}
-    for w in words:
-        freq[w] = freq.get(w, 0) + 1
-    return [w for w, _ in sorted(freq.items(), key=lambda x: (-x[1], x[0]))[:5]]
-
-
-def stage_master_summary(all_trc_summaries: list[str]) -> tuple[str, str]:
-    text = "\n\n".join(all_trc_summaries)
-    raw = text
-    return text, raw
-
-
 # Helpers
+
 
 def ensure_dirs() -> None:
     for d in (INCIDENTS_DIR, PEOPLE_DIR, UPLOADS_DIR, ARTIFACTS_DIR):
@@ -155,10 +93,6 @@ def parse_filename(filename: str) -> tuple[str | None, str | None]:
     return inc, dt
 
 
-def sha256_bytes(data: bytes) -> str:
-    return hashlib.sha256(data).hexdigest()
-
-
 @dataclass
 class PipelineResult:
     incident_id: str
@@ -168,16 +102,46 @@ class PipelineResult:
     failed_stage: str | None = None
 
 
-# 4.3 Pipeline Runner
+# Dynamic stages loading
 
-def process_pipeline(
-    vtt_content: str,
-    incident_id: str,
-    start_time_iso: str,
-    *,
-    start_stage: str | None = None,
-) -> PipelineResult:
-    ensure_dirs()
+
+def _import_from_path(dotted: str) -> Any:
+    module_path, _, attr = dotted.rpartition(".")
+    if not module_path:
+        raise ImportError(f"Invalid dotted path: {dotted}")
+    mod = importlib.import_module(module_path)
+    return getattr(mod, attr)
+
+
+def load_stage_registry() -> tuple[dict[str, Stage], dict[str, dict[str, Any]]]:
+    """Build a stage registry and params map from builtins + optional stages.json + config.json.
+
+    Returns (registry, params_map)
+    """
+    # Start with built-in registry
+    registry: dict[str, Stage] = get_builtin_registry().copy()
+    params_map: dict[str, dict[str, Any]] = {}
+
+    # Optional external stages.json: allows adding new stage impls
+    spec = read_json(STAGES_PATH, {"stages": []})
+    for item in spec.get("stages", []):
+        name = item.get("name")
+        impl = item.get("impl")
+        requires = item.get("requires")
+        if not name or not impl:
+            continue
+        cls = _import_from_path(impl)
+        inst: Stage = cls()  # type: ignore[call-arg]
+        if requires is not None:
+            if isinstance(requires, (list, tuple)):
+                inst.requires = [str(r) for r in requires]
+            else:
+                LOGGER.warning("Stage %s has invalid 'requires' in stages.json", name)
+        registry[name] = inst
+        if item.get("params"):
+            params_map[name] = dict(item["params"])  # baseline params
+
+    # Merge params from config.json
     config = read_json(
         CONFIG_PATH,
         {
@@ -202,6 +166,132 @@ def process_pipeline(
             },
         },
     )
+    for name, conf in config.get("stages", {}).items():
+        if conf.get("params"):
+            base = params_map.get(name, {})
+            # config overrides stages.json
+            params_map[name] = {**base, **conf["params"]}
+
+    return registry, params_map
+
+
+def _build_dependency_graph(registry: dict[str, Stage], enabled: set[str]) -> dict[str, set[str]]:
+    """Build a dependency graph from stage.requires.
+
+    Returns mapping: stage -> set(prereq_stage_names)
+    """
+    graph: dict[str, set[str]] = {s: set() for s in enabled if s in registry}
+    for s, stage in registry.items():
+        if s not in graph:
+            continue
+        for req in getattr(stage, "requires", []) or []:
+            if req == "raw_vtt":
+                continue
+            if req in graph:
+                graph[s].add(req)
+            else:
+                # record unknown prereq by keeping it in set for validation
+                graph[s].add(req)
+    return graph
+
+
+def _toposort_respecting_order(order: list[str], graph: dict[str, set[str]]) -> list[str]:
+    """Return a stable topological ordering that respects the given order when possible.
+
+    Raises ValueError if missing prereqs or cycles are detected.
+    """
+    nodes = [s for s in order if s in graph]
+    present = set(nodes)
+
+    errors: list[str] = []
+    indeg: dict[str, int] = {s: 0 for s in nodes}
+    adj: dict[str, set[str]] = {s: set() for s in nodes}
+
+    # Build indegree/adj and check for missing prereqs
+    for s in nodes:
+        for p in graph[s]:
+            if p not in present:
+                errors.append(f"Stage '{s}' requires missing or disabled '{p}'")
+            else:
+                indeg[s] += 1
+                adj[p].add(s)
+
+    if errors:
+        raise ValueError("; ".join(errors))
+
+    # Kahn's algorithm, using the given order as the queue order
+    remaining: dict[str, int] = indeg.copy()
+    queue = [s for s in nodes if remaining[s] == 0]
+    # preserve order
+    queue.sort(key=lambda x: nodes.index(x))
+    out: list[str] = []
+
+    while queue:
+        n = queue.pop(0)
+        out.append(n)
+        for m in adj[n]:
+            remaining[m] -= 1
+            if remaining[m] == 0:
+                queue.append(m)
+                queue.sort(key=lambda x: nodes.index(x))
+
+    if len(out) != len(nodes):
+        raise ValueError("Dependency cycle detected among stages")
+
+    return out
+
+
+def _collect_prereqs(graph: dict[str, set[str]], start: str) -> set[str]:
+    visited: set[str] = set()
+
+    def dfs(n: str) -> None:
+        for p in graph.get(n, set()):
+            if p not in visited:
+                visited.add(p)
+                dfs(p)
+
+    dfs(start)
+    return visited
+
+
+# 4.3 Pipeline Runner (modular)
+
+
+def process_pipeline(
+    vtt_content: str,
+    incident_id: str,
+    start_time_iso: str,
+    *,
+    start_stage: str | None = None,
+) -> PipelineResult:
+    ensure_dirs()
+
+    # Load config and registry
+    config = read_json(
+        CONFIG_PATH,
+        {
+            "pipeline_order": [
+                "cleanup",
+                "refinement",
+                "people_extraction",
+                "summarisation",
+                "keyword_extraction",
+                "master_summary",
+            ],
+            "stages": {
+                s: {"enabled": True, "params": {}}
+                for s in [
+                    "cleanup",
+                    "refinement",
+                    "people_extraction",
+                    "summarisation",
+                    "keyword_extraction",
+                    "master_summary",
+                ]
+            },
+        },
+    )
+    registry, params_map = load_stage_registry()
 
     incident_path = INCIDENTS_DIR / f"{incident_id}.json"
     incident = read_json(
@@ -217,10 +307,7 @@ def process_pipeline(
     )
 
     trc_id = f"trc_{start_time_iso}"
-    trc = next(
-        (t for t in incident.get("trcs", []) if t.get("trc_id") == trc_id),
-        None,
-    )
+    trc = next((t for t in incident.get("trcs", []) if t.get("trc_id") == trc_id), None)
     if not trc:
         trc = {
             "trc_id": trc_id,
@@ -239,214 +326,157 @@ def process_pipeline(
 
     stage_logs: list[StageLog] = []
 
-    # helpers to set outputs
-    def set_output(key: str, value: Any) -> None:
-        trc["pipeline_outputs"][key] = value
+    # Helpers to persist outputs/artifacts
+    def save_trc_output(key: str, value: Any) -> None:
+        trc.setdefault("pipeline_outputs", {})[key] = value
         write_json(incident_path, incident)
 
-    def set_artifact(key: str, content: str) -> str:
+    def save_trc_artifact_text(key: str, content: str) -> str:
         out_dir = ARTIFACTS_DIR / incident_id / trc_id
         out_dir.mkdir(parents=True, exist_ok=True)
         file_path = out_dir / f"{key}.txt"
         file_path.write_text(content, encoding="utf-8")
-        trc["pipeline_artifacts"][key] = str(file_path)
+        trc.setdefault("pipeline_artifacts", {})[key] = str(file_path)
         write_json(incident_path, incident)
         return str(file_path)
 
-    def set_artifact_json(key: str, data: Any) -> str:
+    def save_trc_artifact_json(key: str, data: Any) -> str:
         out_dir = ARTIFACTS_DIR / incident_id / trc_id
         out_dir.mkdir(parents=True, exist_ok=True)
         file_path = out_dir / f"{key}.json"
         write_json(file_path, data)
-        trc["pipeline_artifacts"][key] = str(file_path)
+        trc.setdefault("pipeline_artifacts", {})[key] = str(file_path)
         write_json(incident_path, incident)
         return str(file_path)
 
-    # Determine start position
-    order: list[str] = [
+    def save_incident_artifact_text(key: str, content: str) -> str:
+        out_dir = ARTIFACTS_DIR / incident_id
+        out_dir.mkdir(parents=True, exist_ok=True)
+        file_path = out_dir / f"{key}.txt"
+        file_path.write_text(content, encoding="utf-8")
+        incident.setdefault("pipeline_artifacts", {})[f"{key}_llm_output"] = str(file_path)
+        write_json(incident_path, incident)
+        return str(file_path)
+
+    # Determine order and starting point
+    enabled_order: list[str] = [
         s
         for s in config.get("pipeline_order", [])
-        if config["stages"].get(s, {}).get("enabled", True)
+        if config.get("stages", {}).get(s, {}).get("enabled", True)
     ]
-    start_idx = order.index(start_stage) if start_stage and start_stage in order else 0
 
-    # Inputs between stages
-    current = vtt_content
+    # Validate and topologically sort the enabled order
+    dep_graph = _build_dependency_graph(registry, set(enabled_order))
+    try:
+        enabled_order = _toposort_respecting_order(enabled_order, dep_graph)
+    except ValueError as ve:
+        # Surface as a pipeline failure early with a clear message
+        msg = f"Pipeline configuration error: {ve}"
+        LOGGER.error(msg)
+        return PipelineResult(
+            incident_id=incident_id,
+            trc_id=f"trc_{start_time_iso}",
+            stage_logs=[StageLog("config", "Failed", 0.0, messages=[str(ve)])],
+            success=False,
+            failed_stage="config",
+        )
 
-    # If rerun starting at an intermediate stage, reuse saved output from prior stage
-    if start_idx > 0:
-        # Map of stage to the prior output key that feeds it
-        input_map = {
-            "refinement": "cleanup",
-            "people_extraction": "refinement",
-            "summarisation": "refinement",
-            "keyword_extraction": "refinement",
-        }
-        start_name = order[start_idx]
-        prior_key = input_map.get(start_name)
-        if prior_key and prior_key in trc.get("pipeline_outputs", {}):
-            current = trc["pipeline_outputs"][prior_key]
+    if start_stage and start_stage in enabled_order:
+        # Backfill prerequisites: start from earliest prereq of the chosen stage
+        prereqs = _collect_prereqs(dep_graph, start_stage)
+        candidates = [s for s in enabled_order if s in prereqs or s == start_stage]
+        start_idx = (
+            enabled_order.index(candidates[0]) if candidates else enabled_order.index(start_stage)
+        )
+    else:
+        start_idx = 0
 
-    for stage_name in order[start_idx:]:
+    for stage_name in enabled_order[start_idx:]:
         t0 = time.perf_counter()
+        stage = registry.get(stage_name)
+        if not stage:
+            stage_logs.append(
+                StageLog(stage_name, "Skipped", 0.0, messages=["Unknown stage, skipped"])
+            )
+            continue
+
+        # Build run context
+        ctx = RunContext(
+            incident_id=incident_id,
+            trc_id=trc_id,
+            incident=incident,
+            trc=trc,
+            data_dir=DATA_DIR,
+            incidents_dir=INCIDENTS_DIR,
+            people_path=PEOPLE_PATH,
+            artifacts_dir=ARTIFACTS_DIR,
+            start_dt=_parse_iso_datetime_safe(start_time_iso),
+        )
+        params = params_map.get(stage_name, {})
+
         try:
-            if stage_name == "cleanup":
-                out = stage_cleanup(current)
-                set_output("cleanup", out)
-                current = out
-                stage_logs.append(
-                    StageLog(
-                        stage_name,
-                        "Completed",
-                        time.perf_counter() - t0,
-                        input_info=f"Input: {len(vtt_content)} chars",
-                        output_info=f"Output: {len(out)} chars",
-                    )
-                )
-
-            elif stage_name == "refinement":
-                out = stage_refinement(current)
-                set_output("refinement", out)
-                current = out
-                stage_logs.append(
-                    StageLog(
-                        stage_name,
-                        "Completed",
-                        time.perf_counter() - t0,
-                        input_info=f"Input: {len(current)} chars",
-                        output_info=f"Output: {len(out)} chars",
-                    )
-                )
-
-            elif stage_name == "people_extraction":
-                data, raw = stage_people_extraction(current)
-                set_output("people_extraction", data)
-                # Save raw LL output as JSON and text for readability
-                set_artifact_json("people_extraction_llm_output", data)
-                set_artifact("people_extraction_llm_output_raw", raw)
-                # Side-effect: update people directory
+            result: StageOutput = stage.run(ctx, params)
+            # Persist trc outputs
+            for k, v in result.trc_outputs.items():
+                save_trc_output(k, v)
+            # Persist trc artifacts
+            for k, content in result.trc_artifacts_text.items():
+                save_trc_artifact_text(k, content)
+            for k, data in result.trc_artifacts_json.items():
+                save_trc_artifact_json(k, data)
+            # Merge incident updates
+            if result.incident_updates:
+                # Special handling for keywords: merge into set
+                if "keywords" in result.incident_updates:
+                    inc_kw = set(incident.get("keywords", []))
+                    for kw in result.incident_updates.get("keywords", []) or []:
+                        inc_kw.add(kw)
+                    incident["keywords"] = sorted(inc_kw)
+                # Title/master_summary and others override if provided
+                for k, v in result.incident_updates.items():
+                    if k == "keywords":
+                        continue
+                    incident[k] = v
+                write_json(incident_path, incident)
+            # Persist incident artifacts (text)
+            for k, content in result.incident_artifacts_text.items():
+                save_incident_artifact_text(k, content)
+            # People directory delta merges
+            if result.people_directory_updates:
                 ppl = read_json(PEOPLE_PATH, {})
-                person_keys = set()
-                for k in ("roles", "knowledge"):
-                    for entry in data.get(k, []):
-                        raw_name = entry.get("raw_name", "").lower()
-                        if not raw_name:
-                            continue
-                        person = ppl.setdefault(raw_name, {
+                for raw_name, delta in result.people_directory_updates.items():
+                    person = ppl.setdefault(
+                        raw_name,
+                        {
                             "raw_name": raw_name,
-                            "display_name": entry.get("display_name", raw_name.title()),
+                            "display_name": delta.get("display_name", raw_name.title()),
                             "role_override": None,
                             "discovered_roles": [],
                             "discovered_knowledge": [],
-                        })
-                        entry_copy = dict(entry)
-                        entry_copy["incident_id"] = incident_id
-                        entry_copy["trc_id"] = trc_id
-                        if k == "roles":
-                            person["discovered_roles"].append(entry_copy)
-                        else:
-                            person["discovered_knowledge"].append(entry_copy)
-                        person_keys.add(raw_name)
+                        },
+                    )
+                    # Append new entries if present
+                    for entry in delta.get("discovered_roles", []):
+                        person.setdefault("discovered_roles", []).append(entry)
+                    for entry in delta.get("discovered_knowledge", []):
+                        person.setdefault("discovered_knowledge", []).append(entry)
                 write_json(PEOPLE_PATH, ppl)
-                stage_logs.append(
-                    StageLog(
-                        stage_name,
-                        "Completed",
-                        time.perf_counter() - t0,
-                        input_info=f"Input: {len(current)} chars",
-                        output_info=(
-                            f"Roles: {len(data.get('roles', []))}, "
-                            f"Knowledge: {len(data.get('knowledge', []))}"
-                        ),
-                    )
-                )
 
-            elif stage_name == "summarisation":
-                new_title, summary, raw = stage_summarisation(
-                    current,
-                    incident.get("title") or None,
-                )
-                set_output("summarisation", summary)
-                set_artifact("summarisation_llm_output", raw)
-                if new_title and not incident.get("title"):
-                    incident["title"] = new_title
-                    write_json(incident_path, incident)
-                stage_logs.append(
-                    StageLog(
-                        stage_name,
-                        "Completed",
-                        time.perf_counter() - t0,
-                        input_info=f"Input: {len(current)} chars",
-                        output_info=f"Summary: {len(summary)} chars",
-                    )
-                )
-
-            elif stage_name == "keyword_extraction":
-                keywords = stage_keyword_extraction(current)
-                set_output("keywords", keywords)
-                inc_kw = set(incident.get("keywords", []))
-                for kw in keywords:
-                    inc_kw.add(kw)
-                incident["keywords"] = sorted(inc_kw)
-                write_json(incident_path, incident)
-                stage_logs.append(
-                    StageLog(
-                        stage_name,
-                        "Completed",
-                        time.perf_counter() - t0,
-                        input_info=f"Input: {len(current)} chars",
-                        output_info=f"Keywords: {len(keywords)}",
-                    )
-                )
-
-            elif stage_name == "master_summary":
-                # collect all trc summaries
-                summaries = [
-                    t.get("pipeline_outputs", {}).get("summarisation", "")
-                    for t in incident.get("trcs", [])
-                ]
-                ms, raw = stage_master_summary([s for s in summaries if s])
-                incident["master_summary"] = ms
-                write_json(incident_path, incident)
-                # store artifact at incident level
-                out_dir = ARTIFACTS_DIR / incident_id
-                out_dir.mkdir(parents=True, exist_ok=True)
-                master_file = out_dir / "master_summary_raw.txt"
-                master_file.write_text(raw, encoding="utf-8")
-                incident.setdefault("pipeline_artifacts", {})[
-                    "master_summary_llm_output"
-                ] = str(master_file)
-                write_json(incident_path, incident)
-                stage_logs.append(
-                    StageLog(
-                        stage_name,
-                        "Completed",
-                        time.perf_counter() - t0,
-                        input_info=f"Summaries: {len(summaries)}",
-                        output_info=f"Master summary: {len(ms)} chars",
-                    )
-                )
-
-            else:
-                stage_logs.append(
-                    StageLog(
-                        stage_name,
-                        "Skipped",
-                        0.0,
-                        messages=["Unknown stage, skipped"],
-                    )
-                )
-
-        except Exception as e:
-            msg = f"Stage {stage_name} failed: {e}"
-            LOGGER.exception(msg)
             stage_logs.append(
                 StageLog(
                     stage_name,
-                    "Failed",
+                    "Completed",
                     time.perf_counter() - t0,
-                    messages=[str(e)],
+                    input_info=result.input_info,
+                    output_info=result.output_info,
+                    messages=result.messages,
                 )
+            )
+        except Exception as e:  # pragma: no cover
+            msg = f"Stage {stage_name} failed: {e}"
+            LOGGER.exception(msg)
+            stage_logs.append(
+                StageLog(stage_name, "Failed", time.perf_counter() - t0, messages=[str(e)])
             )
             return PipelineResult(
                 incident_id=incident_id,
@@ -467,6 +497,9 @@ def process_pipeline(
     )
 
 
+# Convenience functions used by app
+
+
 def list_incidents() -> list[dict[str, Any]]:
     ensure_dirs()
     incidents: list[dict[str, Any]] = []
@@ -484,3 +517,32 @@ def load_people_directory() -> dict[str, Any]:
 
 def save_people_directory(data: dict[str, Any]) -> None:
     write_json(PEOPLE_PATH, data)
+
+
+# Stage isolation helper
+
+
+def run_stage_in_isolation(
+    stage_name: str,
+    ctx_data: dict[str, Any],
+    params: dict[str, Any] | None = None,
+) -> StageOutput:
+    """Run a single stage in isolation for debugging/testing.
+
+    ctx_data must include: incident_id, trc_id, incident, trc.
+    """
+    registry, _ = load_stage_registry()
+    stage = registry.get(stage_name)
+    if not stage:
+        raise ValueError(f"Unknown stage: {stage_name}")
+    ctx = RunContext(
+        incident_id=ctx_data["incident_id"],
+        trc_id=ctx_data["trc_id"],
+        incident=ctx_data["incident"],
+        trc=ctx_data["trc"],
+        data_dir=DATA_DIR,
+        incidents_dir=INCIDENTS_DIR,
+        people_path=PEOPLE_PATH,
+        artifacts_dir=ARTIFACTS_DIR,
+    )
+    return stage.run(ctx, params or {})
