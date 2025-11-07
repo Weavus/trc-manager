@@ -90,12 +90,13 @@ def setup_logging(log_path: Path = Path("app.log"), level: str = "INFO") -> None
     console_handler.setFormatter(console_formatter)
     root_logger.addHandler(console_handler)
 
-    # Set specific loggers to DEBUG if requested
+    # Set specific loggers to DEBUG
+    # Always enable debug logging for LLM interactions
+    logging.getLogger("trc.llm").setLevel(logging.DEBUG)
+
     if level.upper() == "DEBUG":
         # Enable debug logging for pipeline stages
         logging.getLogger("trc.stages").setLevel(logging.DEBUG)
-        # Enable debug logging for LLM interactions
-        logging.getLogger("trc.llm").setLevel(logging.DEBUG)
 
     # Log the setup
     logger = logging.getLogger("trc.pipeline")
@@ -310,7 +311,8 @@ def _validate_stage_inputs(registry: dict[str, Stage], enabled: set[str]) -> lis
         for input_key in getattr(stage, "inputs", []):
             if input_key not in available_outputs:
                 errors.append(
-                    f"Stage '{stage_name}' requires input '{input_key}' but no enabled stage produces it"
+                    f"Stage '{stage_name}' requires input '{input_key}' "
+                    "but no enabled stage produces it"
                 )
 
     return errors
