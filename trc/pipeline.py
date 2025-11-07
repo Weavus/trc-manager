@@ -92,7 +92,16 @@ def setup_logging(log_path: Path = Path("app.log"), level: str = "INFO") -> None
 
     # Set specific loggers to DEBUG
     # Always enable debug logging for LLM interactions
-    logging.getLogger("trc.llm").setLevel(logging.DEBUG)
+    llm_logger = logging.getLogger("trc.llm")
+    llm_logger.setLevel(logging.DEBUG)
+
+    # Create a separate console handler for LLM debug messages
+    llm_console_handler = logging.StreamHandler()
+    llm_console_handler.setLevel(logging.DEBUG)
+    llm_console_handler.setFormatter(console_formatter)
+    llm_logger.addHandler(llm_console_handler)
+    llm_logger.addHandler(file_handler)  # Also log to file
+    llm_logger.propagate = False  # Prevent messages from going to root logger
 
     if level.upper() == "DEBUG":
         # Enable debug logging for pipeline stages
