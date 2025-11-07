@@ -37,6 +37,17 @@ def _format_chars_and_size(text: str) -> str:
         return ""
 
 
+def _copy_script(content: str) -> None:
+    try:
+        js = json.dumps(content or "")
+        st.markdown(
+            f"<script>navigator.clipboard.writeText({js});</script>",
+            unsafe_allow_html=True,
+        )
+    except Exception:
+        pass
+
+
 def init_state() -> None:
     st.session_state.setdefault("page", "TRC Upload")
     st.session_state.setdefault(
@@ -225,14 +236,19 @@ def page_upload() -> None:
 
                     # Inputs
                     with in_col:
-                        st.markdown("**Inputs**")
+                        # Header with copy button
+                        hc1, hc2 = st.columns([0.9, 0.1])
+                        with hc1:
+                            st.markdown("**Inputs**")
+                        # Compute input text to copy
+                        input_text = ""
                         if stage == "master_summary":
-                            # Aggregate summaries across TRCs as input preview
                             summaries = [
                                 t.get("pipeline_outputs", {}).get("summarisation", "")
                                 for t in inc_view.get("trcs", [])
                             ]
                             agg = "\n\n".join([s for s in summaries if s])
+                            input_text = agg
                             label_ms_in = f"summarisation (all TRCs) {_format_chars_and_size(agg)}"
                             st.text_area(
                                 label_ms_in,
@@ -241,25 +257,38 @@ def page_upload() -> None:
                                 disabled=True,
                                 key=f"in_ms_agg_{inc_id}_{result.trc_id}",
                             )
-                            with st.expander("Copy summarisation (all TRCs)"):
-                                st.code(agg)
                         else:
                             key = input_key_map.get(stage)
                             if key:
                                 val = trc_view.get("pipeline_outputs", {}).get(key, "")
                                 if isinstance(val, (dict, list)):
+                                    input_text = json.dumps(val, indent=2)
                                     st.json(val)
-                                    with st.expander(f"Copy {key} (JSON)"):
-                                        st.code(json.dumps(val, indent=2))
                                 else:
+                                    input_text = val or ""
                                     label = f"{key} {_format_chars_and_size(val or '')}"
-                                    st.text_area(label, value=val or "", height=400, disabled=True, key=f"in_{stage}_{key}_{result.trc_id}")
-                                    with st.expander(f"Copy {key}"):
-                                        st.code(val or "")
+                                    st.text_area(
+                                        label,
+                                        value=val or "",
+                                        height=400,
+                                        disabled=True,
+                                        key=f"in_{stage}_{key}_{result.trc_id}",
+                                    )
+                        with hc2:
+                            if st.button(
+                                "📋",
+                                key=f"copy_in_{result.trc_id}_{stage}",
+                                help="Copy inputs to clipboard",
+                            ):
+                                _copy_script(input_text or "")
 
                     # Outputs
                     with out_col:
-                        st.markdown("**Outputs**")
+                        # Header with copy button
+                        hoc1, hoc2 = st.columns([0.9, 0.1])
+                        with hoc1:
+                            st.markdown("**Outputs**")
+                        out_text = ""
                         if stage == "master_summary":
                             ms_text = inc_view.get("master_summary", "")
                             st.text_area(
@@ -269,8 +298,7 @@ def page_upload() -> None:
                                 disabled=True,
                                 key=f"out_ms_{inc_id}_{result.trc_id}",
                             )
-                            with st.expander("Copy master_summary"):
-                                st.code(ms_text)
+                            out_text += (ms_text or "")
 
                             # Incident-level artifacts
                             inc_art = inc_view.get("pipeline_artifacts", {}) or {}
@@ -290,8 +318,7 @@ def page_upload() -> None:
                                         disabled=True,
                                         key=f"ms_raw_{inc_id}_{result.trc_id}",
                                     )
-                                    with st.expander("Copy master_summary_raw_llm_output"):
-                                        st.code(raw)
+                                    out_text += ("\n\n" + (raw or ""))
                                 except Exception:
                                     st.caption("master_summary_raw_llm_output: (unavailable)")
                         else:
@@ -309,8 +336,7 @@ def page_upload() -> None:
                                 val = po[out_key]
                                 if isinstance(val, (dict, list)):
                                     st.json(val)
-                                    with st.expander(f"Copy {out_key} (JSON)"):
-                                        st.code(json.dumps(val, indent=2))
+                                    out_text += json.dumps(val, indent=2)
                                 else:
                                     st.text_area(
                                         f"{out_key} {_format_chars_and_size(val or '')}",
@@ -319,8 +345,7 @@ def page_upload() -> None:
                                         disabled=True,
                                         key=f"out_{out_key}_{trc_view.get('trc_id')}_{result.trc_id}",
                                     )
-                                    with st.expander(f"Copy {out_key}"):
-                                        st.code(val or "")
+                                    out_text += (val or "")
 
                             # Show stage artifacts if present
                             arts = trc_view.get("pipeline_artifacts", {}) or {}
@@ -349,16 +374,21 @@ def page_upload() -> None:
                                             disabled=True,
                                             key=f"art_{ak}_{trc_view.get('trc_id')}_{result.trc_id}",
                                         )
-                                        with st.expander(f"Copy {ak}"):
-                                            st.code(raw)
+                                        out_text += ("\n\n" + (raw or ""))
                                     elif path.endswith(".json"):
                                         with open(path, encoding="utf-8") as f:
                                             data = json.loads(f.read())
                                         st.json(data)
-                                        with st.expander(f"Copy {ak} (JSON)"):
-                                            st.code(json.dumps(data, indent=2))
+                                        out_text += ("\n\n" + json.dumps(data, indent=2))
                                 except Exception:
                                     st.caption(f"{ak}: (unavailable)")
+                        with hoc2:
+                            if st.button(
+                                "📋",
+                                key=f"copy_out_{result.trc_id}_{stage}",
+                                help="Copy outputs to clipboard",
+                            ):
+                                _copy_script(out_text or "")
 
                     # Any log messages
                     for m in log.messages:
