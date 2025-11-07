@@ -1,0 +1,23 @@
+[project]
+name = "trc-manager"
+version = "0.1.0"
+description = "Streamlit app to upload, process, and browse Technical Recovery Call transcripts"
+requires-python = ">=3.10"
+readme = "README.md"
+authors = [{ name = "AI", email = "weavus+ai@sourceofevil.org" }]
+dependencies = [
+  "streamlit>=1.36.0",
+]
+
+[dependency-groups]
+dev = [
+  "pytest>=7.0",
+  "ruff>=0.5",
+]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+ignore = []
