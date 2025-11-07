@@ -21,7 +21,11 @@ def make_ctx(tmp_path: Path, cleaned: str) -> RunContext:
 
 def test_refinement_applies_replacements(tmp_path: Path):
     # Two lines with prefixes; only dialogue text after speaker is replaced
-    cleaned = """10:00 alice: working on cloud era platform\nContinuation with github and git hub\n10:00 bob: checking eikon icon ican status"""
+    cleaned = (
+        "10:00 alice: working on cloud era platform\n"
+        "Continuation with github and git hub\n"
+        "10:00 bob: checking eikon icon ican status"
+    )
     params = {
         "replacement_rules": {
             "common_misspellings": {

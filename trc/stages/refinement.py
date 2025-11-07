@@ -27,7 +27,6 @@ class RefinementStage:
         prefix_pattern = re.compile(r"^(\d{2}:\d{2})\s+([^:]+):\s*(.*)$")
         total_replacements = 0
         out_lines: list[str] = []
-        current_speaker = None
         for raw_line in cleaned.splitlines():
             line = raw_line.rstrip()
             if not line:
@@ -36,7 +35,6 @@ class RefinementStage:
             m = prefix_pattern.match(line)
             if m:
                 hhmm, speaker, dialogue = m.groups()
-                current_speaker = speaker  # track for continuation lines
                 new_dialogue, rep_count = self._apply_replacements(dialogue, ordered_rules)
                 total_replacements += rep_count
                 if new_dialogue:
@@ -69,7 +67,9 @@ class RefinementStage:
                     out[k] = v
         return out
 
-    def _apply_replacements(self, text: str, ordered_rules: list[tuple[str, str]]) -> tuple[str, int]:
+    def _apply_replacements(
+        self, text: str, ordered_rules: list[tuple[str, str]]
+    ) -> tuple[str, int]:
         replaced_total = 0
         for old, new in ordered_rules:
             try:
