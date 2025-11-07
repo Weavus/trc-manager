@@ -1873,8 +1873,8 @@ def display_person_card(person, directory):
         [k.get("incident_id") for k in person.get("discovered_knowledge", []) if k.get("incident_id")]
     ))
 
-    # Card layout
-    st.markdown(f"""
+    # Card layout with complete HTML structure
+    card_html = f"""
     <div style="
         border: 1px solid #e9ecef;
         border-radius: 10px;
@@ -1903,9 +1903,12 @@ def display_person_card(person, directory):
                 <div style="font-size: 1.2rem; font-weight: bold; color: #28a745;">{skills_count}</div>
             </div>
         </div>
-    """, unsafe_allow_html=True)
+    </div>
+    """
 
-    # Action buttons
+    st.markdown(card_html, unsafe_allow_html=True)
+
+    # Action buttons (outside the HTML card)
     col1, col2, col3 = st.columns(3)
     with col1:
         if st.button("👁️ View Details", key=f"view_{raw_name}", use_container_width=True):
@@ -1919,8 +1922,6 @@ def display_person_card(person, directory):
             st.session_state["page"] = "TRC Library"
             st.session_state["filters"]["people"] = [raw_name]
             st.rerun()
-
-    st.markdown("</div>", unsafe_allow_html=True)
 
     # Expanded details
     if st.session_state.get(f"expand_{raw_name}", False):
