@@ -2445,7 +2445,12 @@ def page_config() -> None:
                                 shutil.rmtree(p, ignore_errors=True)
                             else:
                                 p.unlink(missing_ok=True)  # type: ignore[arg-type]
-            st.success("All incidents/TRCs removed")
+            # Clear upload history from session state so files can be re-uploaded
+            st.session_state.pop("processed_files", None)
+            st.session_state.pop("uploader_reset_counter", None)
+            st.session_state.pop("reset_uploader_after_processing", None)
+
+            st.success("All incidents/TRCs and upload history removed")
             st.session_state["delete_all_incidents_flag"] = True
             st.rerun()
 
@@ -2531,6 +2536,14 @@ def page_config() -> None:
                         import shutil
 
                         shutil.rmtree(inc_uploads_dir, ignore_errors=True)
+                    # Clear upload history for this incident so files can be re-uploaded
+                    if "processed_files" in st.session_state:
+                        # Remove any processed_files entries that match this incident
+                        incident_prefix = f"{sel_inc}_"
+                        st.session_state.processed_files = {
+                            fid for fid in st.session_state.processed_files
+                            if not fid.startswith(incident_prefix)
+                        }
                     st.success(f"Deleted incident: {sel_inc}")
                     st.rerun()
         else:
