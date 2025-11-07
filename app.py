@@ -2544,11 +2544,8 @@ def page_config() -> None:
 
 
 def main() -> None:
-    # Only setup logging once to avoid spam
-    import logging
-
-    if not logging.getLogger().handlers:
-        setup_logging()
+    # Setup logging (will configure LLM logger even if called multiple times)
+    setup_logging()
 
     # Use full-width layout
     st.set_page_config(page_title="TRC Manager", layout="wide")

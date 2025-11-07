@@ -95,6 +95,9 @@ def setup_logging(log_path: Path = Path("app.log"), level: str = "INFO") -> None
     llm_logger = logging.getLogger("trc.llm")
     llm_logger.setLevel(logging.DEBUG)
 
+    # Clear existing handlers to avoid duplicates
+    llm_logger.handlers.clear()
+
     # Create dedicated LLM log file
     llm_log_path = Path("llm.log")
     llm_file_handler = logging.FileHandler(llm_log_path)
