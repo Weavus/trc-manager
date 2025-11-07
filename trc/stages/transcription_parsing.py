@@ -16,18 +16,8 @@ class VTTDialogueSegment(TypedDict):
     raw_dialogue: str
 
 
-<<<<<<<< HEAD:trc/stages/transcription_parsing.py
 class TranscriptionParsingStage:
     name = "transcription_parsing"
-========
-class CleanupStage:
-    """DEPRECATED: replaced by `TranscriptionParsingStage`.
-
-    This legacy stage parsed raw VTT to HH:MM Speaker: dialogue lines.
-    Prefer using `trc.stages.transcription_parsing.TranscriptionParsingStage`.
-    """
-    name = "vtt_cleanup"
->>>>>>>> origin/main:trc/stages/vtt_cleanup.py
     requires = ["raw_vtt"]
 
     FOUR_HOURS_TD = timedelta(hours=4)

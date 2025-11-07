@@ -7,19 +7,9 @@ from typing import Any
 from .base import RunContext, StageOutput
 
 
-<<<<<<<< HEAD:trc/stages/participant_analysis.py
 class ParticipantAnalysisStage:
     name = "participant_analysis"
     requires = ["noise_reduction"]
-========
-class PeopleExtractionStage:
-    """DEPRECATED: replaced by `ParticipantAnalysisStage`.
-
-    Prefer `trc.stages.participant_analysis.ParticipantAnalysisStage`.
-    """
-    name = "people_extraction"
-    requires = ["refinement"]
->>>>>>>> origin/main:trc/stages/people_extraction.py
 
     def run(self, ctx: RunContext, params: dict[str, Any] | None = None) -> StageOutput:
         text = ctx.trc.get("pipeline_outputs", {}).get("noise_reduction", "")
