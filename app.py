@@ -106,6 +106,7 @@ def page_upload() -> None:
         go = True
         # Overwrite handling
         if match:
+            go = False
             old_hash = match.get("file_hash")
             if old_hash and old_hash == new_hash:
                 st.warning(f"An identical TRC for {inc_id} at {start_iso} already exists.")
@@ -159,7 +160,11 @@ def page_upload() -> None:
                     break
             inc_path.write_text(json.dumps(inc_doc, indent=2))
 
-        # Save upload
+        if not go:
+            # Skip saving & processing until user confirms overwrite
+            continue
+
+        # Save upload now that we are cleared to proceed
         upload_dir = DATA_DIR / "uploads" / inc_id
         upload_dir.mkdir(parents=True, exist_ok=True)
         save_name = f"{inc_id}-{dt_token}.vtt"
