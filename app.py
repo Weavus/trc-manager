@@ -1873,40 +1873,26 @@ def display_person_card(person, directory):
         [k.get("incident_id") for k in person.get("discovered_knowledge", []) if k.get("incident_id")]
     ))
 
-    # Card layout with complete HTML structure
-    card_html = f"""
-    <div style="
-        border: 1px solid #e9ecef;
-        border-radius: 10px;
-        padding: 1.5rem;
-        margin: 0.5rem 0;
-        background-color: white;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        transition: box-shadow 0.3s ease;
-    ">
-        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem;">
-            <div>
-                <h4 style="margin: 0; color: #495057;">{display_name}</h4>
-                {f'<p style="margin: 0.25rem 0; color: #6c757d; font-size: 0.9rem;">{role_override}</p>' if role_override else ''}
-            </div>
-            <div style="text-align: right;">
-                <div style="font-size: 0.8rem; color: #6c757d;">{total_incidents} incidents</div>
-            </div>
-        </div>
-        <div style="display: flex; gap: 1rem; margin-bottom: 1rem;">
-            <div style="flex: 1;">
-                <div style="font-size: 0.9rem; color: #6c757d;">Roles</div>
-                <div style="font-size: 1.2rem; font-weight: bold; color: #007bff;">{roles_count}</div>
-            </div>
-            <div style="flex: 1;">
-                <div style="font-size: 0.9rem; color: #6c757d;">Skills</div>
-                <div style="font-size: 1.2rem; font-weight: bold; color: #28a745;">{skills_count}</div>
-            </div>
-        </div>
-    </div>
-    """
+    # Card layout using Streamlit components (more reliable than HTML)
+    with st.container():
+        # Card header with name and incident count
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            st.markdown(f"### {display_name}")
+            if role_override:
+                st.caption(f"**Role:** {role_override}")
+        with col2:
+            st.caption(f"📊 {total_incidents} incident{'s' if total_incidents != 1 else ''}")
 
-    st.markdown(card_html, unsafe_allow_html=True)
+        # Statistics row
+        col1, col2 = st.columns(2)
+        with col1:
+            st.metric("👔 Roles", roles_count)
+        with col2:
+            st.metric("🧠 Skills", skills_count)
+
+        # Divider for visual separation
+        st.divider()
 
     # Action buttons (outside the HTML card)
     col1, col2, col3 = st.columns(3)
