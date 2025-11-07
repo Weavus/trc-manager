@@ -2,10 +2,10 @@ from pathlib import Path
 from typing import Any
 
 from trc.stages.base import RunContext
+from trc.stages.keyword_extraction import KeywordExtractionStage
 from trc.stages.participant_knowledge_analysis import ParticipantKnowledgeAnalysisStage
 from trc.stages.participant_role_analysis import ParticipantRoleAnalysisStage
 from trc.stages.summarisation import SummarisationStage
-from trc.stages.keyword_extraction import KeywordExtractionStage
 
 
 def make_ctx(

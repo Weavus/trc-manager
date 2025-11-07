@@ -10,6 +10,7 @@ dependencies = [
   "st-diff-viewer",
   "streamlit-sortables",
   "openai>=1.0.0",
+  "python-dotenv>=1.0.0",
 ]
 
 [dependency-groups]

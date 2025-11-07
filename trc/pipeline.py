@@ -3,12 +3,15 @@ from __future__ import annotations
 import importlib
 import json
 import logging
+import os
 import re
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+from dotenv import load_dotenv
 
 from .stages import get_builtin_registry
 from .stages.base import RunContext, Stage, StageOutput
@@ -114,6 +117,51 @@ def read_json(path: Path, default: Any) -> Any:
         return json.load(f)
 
 
+def read_config() -> dict[str, Any]:
+    """Read config.json with environment variable expansion."""
+    # Load .env file if it exists
+    load_dotenv()
+
+    default_config = {
+        "pipeline_order": [
+            "transcription_parsing",
+            "text_enhancement",
+            "noise_reduction",
+            "participant_analysis",
+            "summarisation",
+            "keyword_extraction",
+            "master_summary_synthesis",
+        ],
+        "stages": {
+            s: {"enabled": True, "params": {}}
+            for s in [
+                "transcription_parsing",
+                "text_enhancement",
+                "noise_reduction",
+                "participant_analysis",
+                "summarisation",
+                "keyword_extraction",
+                "master_summary_synthesis",
+            ]
+        },
+    }
+
+    config = read_json(CONFIG_PATH, default_config)
+
+    # Expand environment variables in the config
+    def expand_env_vars(obj: Any) -> Any:
+        if isinstance(obj, str):
+            return os.path.expandvars(obj)
+        elif isinstance(obj, dict):
+            return {k: expand_env_vars(v) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            return [expand_env_vars(item) for item in obj]
+        else:
+            return obj
+
+    return expand_env_vars(config)
+
+
 def write_json(path: Path, data: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w", encoding="utf-8") as f:
@@ -194,32 +242,7 @@ def load_stage_registry() -> tuple[dict[str, Stage], dict[str, dict[str, Any]]]:
             params_map[name] = dict(item["params"])  # baseline params
 
     # Merge params from config.json
-    config = read_json(
-        CONFIG_PATH,
-        {
-            "pipeline_order": [
-                "transcription_parsing",
-                "text_enhancement",
-                "noise_reduction",
-                "participant_analysis",
-                "summarisation",
-                "keyword_extraction",
-                "master_summary_synthesis",
-            ],
-            "stages": {
-                s: {"enabled": True, "params": {}}
-                for s in [
-                    "transcription_parsing",
-                    "text_enhancement",
-                    "noise_reduction",
-                    "participant_analysis",
-                    "summarisation",
-                    "keyword_extraction",
-                    "master_summary_synthesis",
-                ]
-            },
-        },
-    )
+    config = read_config()
     for name, conf in config.get("stages", {}).items():
         if conf.get("params"):
             base = params_map.get(name, {})
