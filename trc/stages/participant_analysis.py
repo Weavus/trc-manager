@@ -7,19 +7,15 @@ from typing import Any
 from .base import RunContext, StageOutput
 
 
-class PeopleExtractionStage:
-    """DEPRECATED: replaced by `ParticipantAnalysisStage`.
-
-    Prefer `trc.stages.participant_analysis.ParticipantAnalysisStage`.
-    """
-    name = "people_extraction"
-    requires = ["refinement"]
+class ParticipantAnalysisStage:
+    name = "participant_analysis"
+    requires = ["noise_reduction"]
 
     def run(self, ctx: RunContext, params: dict[str, Any] | None = None) -> StageOutput:
-        refined = ctx.trc.get("pipeline_outputs", {}).get("refinement", "")
-        names = set(re.findall(r"([A-Z][a-z]+\s+[A-Z][a-z]+)", refined))
-        roles = []
-        knowledge = []
+        text = ctx.trc.get("pipeline_outputs", {}).get("noise_reduction", "")
+        names = set(re.findall(r"([A-Z][a-z]+\s+[A-Z][a-z]+)", text))
+        roles: list[dict[str, Any]] = []
+        knowledge: list[dict[str, Any]] = []
         updates: dict[str, dict[str, Any]] = {}
         for n in names:
             raw = n.lower()
@@ -66,10 +62,10 @@ class PeopleExtractionStage:
         payload = {"roles": roles, "knowledge": knowledge}
         raw_llm_output = json.dumps(payload, indent=2)
         return StageOutput(
-            trc_outputs={"people_extraction": payload},
-            trc_artifacts_json={"people_extraction_llm_output": payload},
-            trc_artifacts_text={"people_extraction_llm_output_raw": raw_llm_output},
+            trc_outputs={"participant_analysis": payload},
+            trc_artifacts_json={"participant_analysis_llm_output": payload},
+            trc_artifacts_text={"participant_analysis_llm_output_raw": raw_llm_output},
             people_directory_updates=updates,
-            input_info=f"Input: {len(refined)} chars",
+            input_info=f"Input: {len(text)} chars",
             output_info=(f"Roles: {len(roles)}, Knowledge: {len(knowledge)}"),
         )
