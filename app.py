@@ -153,8 +153,7 @@ def sidebar_nav() -> None:
                 if st.button(
                     button_label,
                     key=f"nav_{item['name'].replace(' ', '_').lower()}",
-                    use_container_width=True,
-                    help=item["description"]
+                    use_container_width=True
                 ):
                     st.session_state["page"] = item["name"]
                     st.rerun()
@@ -1873,8 +1872,10 @@ def display_person_card(person, directory):
         [k.get("incident_id") for k in person.get("discovered_knowledge", []) if k.get("incident_id")]
     ))
 
-    # Card layout with inline styling
-    card_style = """
+    # Create complete card as HTML to avoid Streamlit component rendering issues
+    role_text = f'<p style="margin: 0.25rem 0; color: #6c757d; font-size: 0.9rem;"><strong>Role:</strong> {role_override}</p>' if role_override else ''
+
+    card_html = f"""
     <div style="
         border: 1px solid #e9ecef;
         border-radius: 10px;
@@ -1883,29 +1884,34 @@ def display_person_card(person, directory):
         background-color: white;
         box-shadow: 0 2px 4px rgba(0,0,0,0.1);
     ">
+        <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem;">
+            <div>
+                <h3 style="margin: 0 0 0.5rem 0; color: #495057; font-size: 1.25rem;">{display_name}</h3>
+                {role_text}
+            </div>
+            <div style="text-align: right; color: #6c757d; font-size: 0.8rem;">
+                📊 {total_incidents} incident{'s' if total_incidents != 1 else ''}
+            </div>
+        </div>
+
+        <div style="display: flex; gap: 1rem; margin-bottom: 1rem;">
+            <div style="flex: 1; text-align: center; padding: 1rem; background-color: #f8f9fa; border-radius: 8px;">
+                <div style="font-size: 1.5rem;">👔</div>
+                <div style="font-size: 0.9rem; color: #6c757d; margin: 0.25rem 0;">Roles</div>
+                <div style="font-size: 1.5rem; font-weight: bold; color: #007bff;">{roles_count}</div>
+            </div>
+            <div style="flex: 1; text-align: center; padding: 1rem; background-color: #f8f9fa; border-radius: 8px;">
+                <div style="font-size: 1.5rem;">🧠</div>
+                <div style="font-size: 0.9rem; color: #6c757d; margin: 0.25rem 0;">Skills</div>
+                <div style="font-size: 1.5rem; font-weight: bold; color: #28a745;">{skills_count}</div>
+            </div>
+        </div>
+    </div>
     """
 
-    st.markdown(card_style, unsafe_allow_html=True)
+    st.markdown(card_html, unsafe_allow_html=True)
 
-    # Card header with name and incident count
-    col1, col2 = st.columns([3, 1])
-    with col1:
-        st.markdown(f"### {display_name}")
-        if role_override:
-            st.caption(f"**Role:** {role_override}")
-    with col2:
-        st.caption(f"📊 {total_incidents} incident{'s' if total_incidents != 1 else ''}")
-
-    # Statistics row
-    col1, col2 = st.columns(2)
-    with col1:
-        st.metric("👔 Roles", roles_count)
-    with col2:
-        st.metric("🧠 Skills", skills_count)
-
-    st.markdown("</div>", unsafe_allow_html=True)
-
-    # Action buttons (outside the HTML card)
+    # Action buttons (outside the HTML card for Streamlit functionality)
     col1, col2, col3 = st.columns(3)
     with col1:
         if st.button("👁️ View Details", key=f"view_{raw_name}", use_container_width=True):
