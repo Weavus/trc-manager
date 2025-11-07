@@ -20,7 +20,7 @@ PEOPLE_PATH = PEOPLE_DIR / "people_directory.json"
 LOGGER = logging.getLogger("trc.pipeline")
 
 INC_REGEX = re.compile(r"(INC\d{10,12})")
-DT_REGEX = re.compile(r"(\d{8}-\d{4})")
+DT_REGEX = re.compile(r"(?<!\d)(\d{8}-\d{4})(?!\d)")
 
 
 @dataclass
