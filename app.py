@@ -439,11 +439,11 @@ def process_uploaded_files(files):
     # Quick actions
     col1, col2 = st.columns(2)
     with col1:
-        if st.button("📚 Go to Library", use_container_width=True):
+        if st.button("📚 Go to Library", key="goto_library_after_upload", use_container_width=True):
             st.session_state["page"] = "TRC Library"
             st.rerun()
     with col2:
-        if st.button("📤 Upload More Files", use_container_width=True):
+        if st.button("📤 Upload More Files", key="upload_more_files", use_container_width=True):
             st.rerun()
 
     for up in files:
