@@ -79,7 +79,9 @@ class TranscriptionParsingStage:
             current_total_rollover_offset = timedelta(0)
 
             for seg in raw_segments:
-                speaker = self.generate_display_name(seg.get("raw_speaker", "") or "Unknown Speaker")
+                speaker = self.generate_display_name(
+                    seg.get("raw_speaker", "") or "Unknown Speaker"
+                )
                 dialogue = seg.get("raw_dialogue", "")
 
                 if flat_replacements:
@@ -117,7 +119,10 @@ class TranscriptionParsingStage:
                         display_dt = meeting_start_dt
                     current_vtt_offset_td = timedelta(0)
                 else:
-                    if last_vtt_offset_td is not None and current_vtt_offset_td < last_vtt_offset_td:
+                    if (
+                        last_vtt_offset_td is not None
+                        and current_vtt_offset_td < last_vtt_offset_td
+                    ):
                         current_total_rollover_offset += self.FOUR_HOURS_TD
                         logger.debug(
                             "VTT time rollover detected. Prev: %s Curr: %s Total adjustment: %s",

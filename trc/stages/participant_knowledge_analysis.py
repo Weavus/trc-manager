@@ -5,7 +5,7 @@ import logging
 import re
 from typing import Any
 
-from ..llm import create_client_from_config, PromptTemplate
+from ..llm import PromptTemplate, create_client_from_config
 from .base import RunContext, StageOutput
 
 logger = logging.getLogger(__name__)
@@ -18,7 +18,9 @@ class ParticipantKnowledgeAnalysisStage:
     depends_on = ["participant_role_analysis"]
 
     def run(self, ctx: RunContext, params: dict[str, Any] | None = None) -> StageOutput:
-        logger.info(f"Starting participant knowledge analysis for incident {ctx.incident_id}, TRC {ctx.trc_id}")
+        logger.info(
+            f"Starting participant knowledge analysis for incident {ctx.incident_id}, TRC {ctx.trc_id}"
+        )
         text = ctx.trc.get("pipeline_outputs", {}).get("noise_reduction", "")
         # Get roles from the previous stage
         role_analysis = ctx.trc.get("pipeline_outputs", {}).get("participant_role_analysis", {})
@@ -48,7 +50,7 @@ class ParticipantKnowledgeAnalysisStage:
 
                 out_dir = ctx.artifacts_dir / ctx.incident_id / ctx.trc_id
                 out_dir.mkdir(parents=True, exist_ok=True)
-                request_file = out_dir / f"participant_knowledge_analysis_llm_request.txt"
+                request_file = out_dir / "participant_knowledge_analysis_llm_request.txt"
                 request_file.write_text(rendered_prompt, encoding="utf-8")
 
                 response = llm_client.call_llm(prompt=rendered_prompt, **params)
@@ -81,7 +83,9 @@ class ParticipantKnowledgeAnalysisStage:
                 # Combine with role analysis for backward compatibility
                 combined_payload = {"roles": existing_roles, "knowledge": knowledge}
 
-                logger.info(f"Participant knowledge analysis completed using LLM: {len(knowledge)} knowledge entries identified")
+                logger.info(
+                    f"Participant knowledge analysis completed using LLM: {len(knowledge)} knowledge entries identified"
+                )
                 return StageOutput(
                     trc_outputs={
                         "participant_knowledge_analysis": {"knowledge": knowledge},
@@ -104,7 +108,9 @@ class ParticipantKnowledgeAnalysisStage:
                 )
             except Exception as e:
                 # Fallback to heuristic approach if LLM fails
-                logger.warning(f"LLM participant knowledge analysis failed: {e}, falling back to heuristic")
+                logger.warning(
+                    f"LLM participant knowledge analysis failed: {e}, falling back to heuristic"
+                )
 
         # Fallback: heuristic-based participant knowledge analysis
         logger.debug("Using heuristic-based participant knowledge analysis")
@@ -146,7 +152,9 @@ class ParticipantKnowledgeAnalysisStage:
         # Combine with role analysis for backward compatibility
         combined_payload = {"roles": existing_roles, "knowledge": knowledge}
 
-        logger.info(f"Participant knowledge analysis completed using heuristic: {len(knowledge)} knowledge entries identified")
+        logger.info(
+            f"Participant knowledge analysis completed using heuristic: {len(knowledge)} knowledge entries identified"
+        )
         return StageOutput(
             trc_outputs={
                 "participant_knowledge_analysis": {"knowledge": knowledge},

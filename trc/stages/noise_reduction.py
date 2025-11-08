@@ -1,11 +1,9 @@
 from __future__ import annotations
 
-import contextlib
 import logging
-import re
 from typing import Any
 
-from ..llm import create_client_from_config, PromptTemplate
+from ..llm import PromptTemplate, create_client_from_config
 from .base import RunContext, StageOutput
 
 logger = logging.getLogger(__name__)
@@ -44,86 +42,47 @@ class NoiseReductionStage:
         if llm_config:
             logger.debug("Using LLM for noise reduction")
             # Use LLM for noise reduction
-            try:
-                llm_client = create_client_from_config(ctx.llm_config or {})
-                prompt_file = llm_config["prompt_file"]
+            llm_client = create_client_from_config(ctx.llm_config or {})
+            prompt_file = llm_config["prompt_file"]
 
-                # For noise reduction, we need to provide known_terms and transcript
-                # Get known terms from config params
-                known_terms_config = cfg.get("known_terms", {})
-                if known_terms_config:
-                    # Format known terms by category for the prompt
-                    formatted_terms = []
-                    for category, terms in known_terms_config.items():
-                        if terms:
-                            category_name = category.replace("_", " ").title()
-                            terms_list = ", ".join(terms)
-                            formatted_terms.append(f"**{category_name}:**\n{terms_list}")
-                    known_terms = "\n\n".join(formatted_terms)
-                else:
-                    known_terms = "No specific terms provided."
+            # For noise reduction, we need to provide known_terms and transcript
+            # Get known terms from config params
+            known_terms_config = cfg.get("known_terms", {})
+            if known_terms_config:
+                # Format known terms by category for the prompt
+                formatted_terms = []
+                for category, terms in known_terms_config.items():
+                    if terms:
+                        category_name = category.replace("_", " ").title()
+                        terms_list = ", ".join(terms)
+                        formatted_terms.append(f"**{category_name}:**\n{terms_list}")
+                known_terms = "\n\n".join(formatted_terms)
+            else:
+                known_terms = "No specific terms provided."
 
-                template = PromptTemplate(prompt_file)
-                rendered_prompt = template.render(known_terms=known_terms, transcript=text)
-                params = template.get_llm_params()
+            template = PromptTemplate(prompt_file)
+            rendered_prompt = template.render(known_terms=known_terms, transcript=text)
+            params = template.get_llm_params()
 
-                out_dir = ctx.artifacts_dir / ctx.incident_id / ctx.trc_id
-                out_dir.mkdir(parents=True, exist_ok=True)
-                request_file = out_dir / f"noise_reduction_llm_request.txt"
-                request_file.write_text(rendered_prompt, encoding="utf-8")
+            out_dir = ctx.artifacts_dir / ctx.incident_id / ctx.trc_id
+            out_dir.mkdir(parents=True, exist_ok=True)
+            request_file = out_dir / "noise_reduction_llm_request.txt"
+            request_file.write_text(rendered_prompt, encoding="utf-8")
 
-                cleaned_text = llm_client.call_llm(prompt=rendered_prompt, **params).strip()
+            cleaned_text = llm_client.call_llm(prompt=rendered_prompt, **params).strip()
 
-                logger.info(
-                    f"Noise reduction completed using LLM: {len(cleaned_text)} chars output"
-                )
-                return StageOutput(
-                    trc_outputs={"noise_reduction": cleaned_text},
-                    trc_artifacts_text={"noise_reduction_llm_output": cleaned_text},
-                    input_info=f"Input: {len(text)} chars",
-                    output_info=f"Output: {len(cleaned_text)} chars (LLM processed)",
-                    messages=["Used LLM for noise reduction"],
-                )
-            except Exception as e:
-                # Fallback to regex-based approach if LLM fails
-                logger.warning(f"LLM noise reduction failed: {e}, falling back to regex")
-
-        # Fallback: regex-based noise reduction
-        logger.debug("Using regex-based noise reduction")
-        filler_patterns = list(self.FILLER_PATTERNS)
-        for p in cfg.get("extra_fillers", []):
-            with contextlib.suppress(Exception):
-                filler_patterns.append(str(p))
-
-        compiled = []
-        for p in filler_patterns:
-            try:
-                compiled.append(re.compile(p, re.IGNORECASE))
-            except re.error:
-                continue
-
-        logger.debug(f"Compiled {len(compiled)} filler patterns")
-        total = 0
-        out_lines: list[str] = []
-        for line in (text or "").splitlines():
-            for rx in compiled:
-                line, n = rx.subn("", line)
-                total += n
-            # collapse excess spaces introduced
-            line = re.sub(r"\s{2,}", " ", line).strip()
-            out_lines.append(line)
-
-        out_text = "\n".join(out_lines).strip()
-        logger.info(
-            f"Noise reduction completed using regex: {len(out_text)} chars output, "
-            f"{total} fillers removed"
-        )
-        msgs = []
-        if total:
-            msgs.append(f"Removed {total} filler tokens")
-        return StageOutput(
-            trc_outputs={"noise_reduction": out_text},
-            input_info=f"Input: {len(text)} chars",
-            output_info=f"Output: {len(out_text)} chars; fillers removed: {total}",
-            messages=msgs,
-        )
+            logger.info(f"Noise reduction completed using LLM: {len(cleaned_text)} chars output")
+            return StageOutput(
+                trc_outputs={"noise_reduction": cleaned_text},
+                trc_artifacts_text={"noise_reduction_llm_output": cleaned_text},
+                input_info=f"Input: {len(text)} chars",
+                output_info=f"Output: {len(cleaned_text)} chars (LLM processed)",
+                messages=["Used LLM for noise reduction"],
+            )
+        else:
+            logger.warning("No LLM config for noise reduction, skipping")
+            return StageOutput(
+                trc_outputs={"noise_reduction": ""},
+                input_info=f"Input: {len(text)} chars",
+                output_info="Output: 0 chars (no LLM)",
+            )
