@@ -29,20 +29,13 @@ class ParticipantAnalysisStage:
                 rendered_prompt = template.render(transcript=text)
                 params = template.get_llm_params()
 
-                if logger.isEnabledFor(logging.DEBUG):
-                    # Save debug request
-                    out_dir = ctx.artifacts_dir / ctx.incident_id / ctx.trc_id
-                    out_dir.mkdir(parents=True, exist_ok=True)
-                    request_file = out_dir / f"participant_analysis.{ctx.incident_id}.request"
-                    request_file.write_text(rendered_prompt, encoding="utf-8")
+                out_dir = ctx.artifacts_dir / ctx.incident_id / ctx.trc_id
+                out_dir.mkdir(parents=True, exist_ok=True)
+                request_file = out_dir / f"participant_analysis_llm_request.txt"
+                request_file.write_text(rendered_prompt, encoding="utf-8")
 
                 response = llm_client.call_llm(prompt=rendered_prompt, **params)
                 payload = json.loads(response)
-
-                if logger.isEnabledFor(logging.DEBUG):
-                    # Save debug response
-                    response_file = out_dir / f"participant_analysis.{ctx.incident_id}.response"
-                    response_file.write_text(response, encoding="utf-8")
 
                 roles = payload.get("roles", [])
                 knowledge = payload.get("knowledge", [])

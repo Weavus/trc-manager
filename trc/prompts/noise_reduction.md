@@ -1,6 +1,6 @@
 ---
 description: "Proofreads, corrects, and distills a meeting transcript to its essential technical and operational core."
-model_id_ref: "openai/gpt-5-mini"
+model_id_ref: "openai/gpt-5"
 force_json_output: false
 parameters:
   temperature: 0.1
