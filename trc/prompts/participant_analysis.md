@@ -1,5 +1,5 @@
 ---
-description: "Analyzes a single participant's dialogue to infer their role."
+description: "Analyzes a single participant's dialogue to infer their role and technical knowledge."
 model_id_ref: "openai/gpt-5-mini"
 force_json_output: true
 parameters:
@@ -7,31 +7,29 @@ parameters:
   max_tokens: 4096
 ---
 
-You are an AI expert in analyzing meeting transcripts. Your task is to analyze the provided dialogue from a single participant and assign their most probable roles based on the provided role taxonomy.
+You are an AI expert in analyzing meeting transcripts. Your task is to analyze the provided dialogue from a single participant and infer their role and technical knowledge areas.
 
 ### INSTRUCTIONS
 1.  **Analyze Dialogue:** Review the `participant_dialogue` to understand the speaker's contributions.
-2.  **Infer Roles:** Identify up to 3 potential roles from the `role_taxonomy` that best match the participant's dialogue. Check both primary roles and aliases.
-3.  **Filter by Quality:** Only include a role if you have high confidence in the match. As a guideline, only return roles where you would assign a `confidence_score` of 7 or higher. If no roles meet this quality bar, return an empty array `[]`.
-4.  **Provide Confidence & Reasoning:** For each role, provide a `confidence_score` (1-10) and a brief `reasoning` (max 50 words) explaining your choice based on the dialogue.
-5.  **Format Output:** The entire response **MUST** be a single JSON array of objects. Do not include any text outside the JSON.
+2.  **Infer Role:** Identify the most probable role from the `role_taxonomy` that best matches the participant's dialogue. Check both primary roles and aliases.
+3.  **Infer Knowledge:** Identify technical expertise areas demonstrated in the dialogue, such as cloud platforms, databases, monitoring tools, etc.
+4.  **Provide Confidence & Reasoning:** For both role and knowledge, provide a `confidence_score` (1-10) and a brief `reasoning` explaining your choice based on the dialogue.
+5.  **Format Output:** The entire response **MUST** be a single JSON object. Do not include any text outside the JSON.
 
 ### OUTPUT FORMAT
 ```json
-[
-  {
-    "name": "{{participant_name}}",
-    "inferred_role": "Taxonomy Role 1",
+{
+  "role": {
+    "name": "Taxonomy Role",
     "confidence_score": 9,
-    "reasoning": "Brief justification for role 1 (max 50 words)."
+    "reasoning": "Brief justification for the role (max 50 words)."
   },
-  {
-    "name": "{{participant_name}}",
-    "inferred_role": "Taxonomy Role 2",
+  "knowledge": {
+    "areas": "Comma-separated technical expertise areas",
     "confidence_score": 8,
-    "reasoning": "Brief justification for role 2 (max 50 words)."
+    "reasoning": "Brief justification for the knowledge areas (max 50 words)."
   }
-]
+}
 ```
 
 ### INPUTS

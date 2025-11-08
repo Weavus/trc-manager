@@ -29,7 +29,7 @@ class SummarisationStage:
             prompt_file = llm_config["prompt_file"]
 
             template = PromptTemplate(prompt_file)
-            rendered_prompt = template.render(transcript=text)
+            rendered_prompt = template.render(incident_id=ctx.incident_id, meeting_dialogue=text)
             params = template.get_llm_params()
 
             out_dir = ctx.artifacts_dir / ctx.incident_id / ctx.trc_id
@@ -42,7 +42,13 @@ class SummarisationStage:
             incident_title = ctx.incident.get("title") or None
             title: str | None = None
             if not incident_title:
-                title = (text[:60] + "...") if len(text) > 60 else text
+                # Try to extract title from the summary first line
+                first_line = summary.split("\n", 1)[0].strip()
+                if first_line.startswith(ctx.incident_id + " - "):
+                    title = first_line[len(ctx.incident_id) + 3 :].strip()
+                else:
+                    # Fallback to text preview
+                    title = (text[:60] + "...") if len(text) > 60 else text
 
             incident_updates: dict[str, Any] = {}
             if title and not (ctx.incident.get("title") or ""):

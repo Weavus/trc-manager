@@ -16,28 +16,48 @@ class MasterSummarySynthesisStage:
     depends_on = ["summarisation"]  # Depends on all TRCs having summarisation completed
 
     def run(self, ctx: RunContext, params: dict[str, Any] | None = None) -> StageOutput:
-        logger.info(f"Starting master summary synthesis for incident {ctx.incident_id}")
-        summaries = [
-            t.get("pipeline_outputs", {}).get("summarisation", "")
-            for t in ctx.incident.get("trcs", [])
-        ]
-        summaries = [s for s in summaries if s]
-        logger.debug(f"Found {len(summaries)} TRC summaries to synthesize")
+        logger.info(
+            f"Starting master summary synthesis for incident {ctx.incident_id}, TRC {ctx.trc_id}"
+        )
+        current_summary = ctx.trc.get("pipeline_outputs", {}).get("summarisation", "")
+        existing_master = ctx.incident.get("master_summary", "")
+        logger.debug(
+            f"Current summary length: {len(current_summary)}, "
+            f"existing master length: {len(existing_master)}"
+        )
         cfg = params or {}
         llm_config = cfg.get("llm")
 
-        if llm_config and summaries:
-            logger.debug("Using LLM for master summary synthesis")
-            # Use LLM for master summary synthesis
-            llm_client = create_client_from_config(ctx.llm_config or {})
-            prompt_file = llm_config["prompt_file"]
-
-            summaries_text = "\n\n".join(
-                f"TRC {i + 1}:\n{summary}" for i, summary in enumerate(summaries)
+        if not current_summary:
+            logger.warning("No current summary for this TRC, skipping master summary synthesis")
+            return StageOutput(
+                input_info="No current summary",
+                output_info="Skipped",
             )
 
+        if llm_config:
+            llm_client = create_client_from_config(ctx.llm_config or {})
+            prompt_file = llm_config["prompt_file"]
             template = PromptTemplate(prompt_file)
-            rendered_prompt = template.render(summaries=summaries_text)
+
+            if existing_master:
+                # Synthesize with existing master
+                logger.debug("Synthesizing with existing master summary")
+                rendered_prompt = template.render(
+                    previous_master_summary=existing_master,
+                    current_reconvene_summary=current_summary,
+                )
+            else:
+                # First summary, just use it as master
+                logger.debug("Setting first summary as master")
+                return StageOutput(
+                    incident_updates={"master_summary": current_summary},
+                    incident_artifacts_text={"master_summary_raw_llm_output": current_summary},
+                    input_info="First summary",
+                    output_info=f"Master summary: {len(current_summary)} chars (first)",
+                    messages=["Set first summary as master"],
+                )
+
             params = template.get_llm_params()
 
             out_dir = ctx.artifacts_dir / ctx.incident_id / ctx.trc_id
@@ -53,14 +73,27 @@ class MasterSummarySynthesisStage:
             return StageOutput(
                 incident_updates={"master_summary": master_summary},
                 incident_artifacts_text={"master_summary_raw_llm_output": master_summary},
-                input_info=f"Summaries: {len(summaries)}",
+                input_info=f"Previous: {len(existing_master)} chars, "
+                f"Current: {len(current_summary)} chars",
                 output_info=f"Master summary: {len(master_summary)} chars (LLM processed)",
                 messages=["Used LLM for master summary synthesis"],
             )
         else:
-            logger.warning("No LLM config for master summary synthesis or no summaries, skipping")
-            return StageOutput(
-                incident_updates={"master_summary": ""},
-                input_info=f"Summaries: {len(summaries)}",
-                output_info="Master summary: 0 chars (no LLM or no summaries)",
-            )
+            logger.warning("No LLM config for master summary synthesis, using fallback")
+            if not existing_master:
+                # First summary
+                return StageOutput(
+                    incident_updates={"master_summary": current_summary},
+                    incident_artifacts_text={"master_summary_raw_llm_output": current_summary},
+                    input_info="No LLM, setting current as master",
+                    output_info=f"Master summary: {len(current_summary)} chars (no LLM)",
+                )
+            else:
+                # Concatenate for fallback
+                combined = existing_master + "\n\n" + current_summary
+                return StageOutput(
+                    incident_updates={"master_summary": combined},
+                    incident_artifacts_text={"master_summary_raw_llm_output": combined},
+                    input_info="No LLM, concatenated summaries",
+                    output_info=f"Master summary: {len(combined)} chars (concatenated)",
+                )

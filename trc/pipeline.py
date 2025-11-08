@@ -62,12 +62,9 @@ def setup_logging(log_path: Path = Path("app.log"), level: str = "INFO") -> None
 
     # Create formatters
     file_formatter = logging.Formatter(
-        "%(asctime)s %(levelname)-8s %(name)-30s %(message)s",
-        datefmt="%Y-%m-%d %H:%M:%S"
+        "%(asctime)s %(levelname)-8s %(name)-30s %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
     )
-    console_formatter = logging.Formatter(
-        "%(levelname)-8s %(name)-30s %(message)s"
-    )
+    console_formatter = logging.Formatter("%(levelname)-8s %(name)-30s %(message)s")
 
     # Setup root logger
     root_logger = logging.getLogger()
@@ -89,9 +86,9 @@ def setup_logging(log_path: Path = Path("app.log"), level: str = "INFO") -> None
     root_logger.addHandler(console_handler)
 
     # Set specific loggers to DEBUG
-    # Always enable debug logging for LLM interactions
+    # Configure LLM logging
     llm_logger = logging.getLogger("trc.llm")
-    llm_logger.setLevel(logging.DEBUG)
+    llm_logger.setLevel(logging.INFO)  # Changed from DEBUG to INFO
 
     # Clear existing handlers to avoid duplicates
     llm_logger.handlers.clear()
@@ -99,13 +96,13 @@ def setup_logging(log_path: Path = Path("app.log"), level: str = "INFO") -> None
     # Create dedicated LLM log file
     llm_log_path = Path("llm.log")
     llm_file_handler = logging.FileHandler(llm_log_path)
-    llm_file_handler.setLevel(logging.DEBUG)
+    llm_file_handler.setLevel(logging.DEBUG)  # Keep file logging at DEBUG
     llm_file_handler.setFormatter(file_formatter)
     llm_logger.addHandler(llm_file_handler)
 
-    # Create a separate console handler for LLM debug messages
+    # Create a separate console handler for LLM messages
     llm_console_handler = logging.StreamHandler()
-    llm_console_handler.setLevel(logging.DEBUG)
+    llm_console_handler.setLevel(logging.INFO)  # Changed from DEBUG to INFO
     llm_console_handler.setFormatter(console_formatter)
     llm_logger.addHandler(llm_console_handler)
     llm_logger.addHandler(file_handler)
@@ -119,8 +116,10 @@ def setup_logging(log_path: Path = Path("app.log"), level: str = "INFO") -> None
     logger = logging.getLogger("trc.pipeline")
     logger.info(f"Logging initialized at level {level} to {log_path}")
     llm_logger = logging.getLogger("trc.llm")
-    logger.info(f"LLM logger configured: level={llm_logger.level}, "
-                f"propagate={llm_logger.propagate}, handlers={len(llm_logger.handlers)}")
+    logger.info(
+        f"LLM logger configured: level={llm_logger.level}, "
+        f"propagate={llm_logger.propagate}, handlers={len(llm_logger.handlers)}"
+    )
 
 
 # Helpers

@@ -80,9 +80,9 @@ class NoiseReductionStage:
                 messages=["Used LLM for noise reduction"],
             )
         else:
-            logger.warning("No LLM config for noise reduction, skipping")
+            logger.warning("No LLM config for noise reduction, using input text as-is")
             return StageOutput(
-                trc_outputs={"noise_reduction": ""},
+                trc_outputs={"noise_reduction": text},
                 input_info=f"Input: {len(text)} chars",
-                output_info="Output: 0 chars (no LLM)",
+                output_info=f"Output: {len(text)} chars (no LLM)",
             )

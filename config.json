@@ -10,12 +10,108 @@
     "transcription_parsing",
     "text_enhancement",
     "noise_reduction",
-    "participant_role_analysis",
-    "participant_knowledge_analysis",
+    "participant_analysis",
     "keyword_extraction",
     "summarisation",
     "master_summary_synthesis"
   ],
+  "role_taxonomy": {
+    "SRE": {
+      "description": "Manages production system reliability, scalability, and performance through automation and monitoring.",
+      "aliases": [
+        "Site Reliability",
+        "RE",
+        "Recovery Manager",
+        "L2"
+      ]
+    },
+    "Developer": {
+      "description": "Designs, codes, and maintains software applications; fixes code-level bugs.",
+      "aliases": [
+        "Dev",
+        "Software Engineer",
+        "PE",
+        "L3"
+      ]
+    },
+    "Security": {
+      "description": "Monitors and responds to security threats and incidents.",
+      "aliases": [
+        "SecOps",
+        "GSOC",
+        "Cyber Security"
+      ]
+    },
+    "Network": {
+      "description": "Manages and maintains network infrastructure (routers, switches, firewalls).",
+      "aliases": [
+        "NetEng",
+        "GNOC",
+        "Network Operations"
+      ]
+    },
+    "MIM": {
+      "description": "Manages major incident response, communication, and resolution.",
+      "aliases": [
+        "Major Incident Management",
+        "Incident Lead"
+      ]
+    },
+    "Sales": {
+      "description": "Manages commercial customer relationships and sales.",
+      "aliases": [
+        "SAM",
+        "Account Manager"
+      ]
+    },
+    "Support": {
+      "description": "Provides technical support to customers or internal employees, handling initial triage and escalations.",
+      "aliases": [
+        "FLS",
+        "L1",
+        "Helpdesk",
+        "Service Desk",
+        "CSM",
+        "Customer Success"
+      ]
+    },
+    "DBA": {
+      "description": "Manages and maintains databases.",
+      "aliases": [
+        "Database Admin",
+        "Database Operations"
+      ]
+    },
+    "Product": {
+      "description": "Defines product strategy, roadmap, and features.",
+      "aliases": [
+        "PM",
+        "Product Management",
+        "Product Owner"
+      ]
+    },
+    "QA": {
+      "description": "Ensures product quality through testing and bug verification.",
+      "aliases": [
+        "Quality Assurance",
+        "Testing"
+      ]
+    },
+    "Service Comms": {
+      "description": "Manages stakeholder communications during incidents.",
+      "aliases": [
+        "SCT",
+        "Service Communications Team"
+      ]
+    },
+    "Manager": {
+      "description": "Leads a team and is accountable for its performance.",
+      "aliases": [
+        "Lead",
+        "Team Lead"
+      ]
+    }
+  },
   "stages": {
     "transcription_parsing": {
       "enabled": true,
@@ -249,19 +345,11 @@
         }
       }
     },
-    "participant_role_analysis": {
+    "participant_analysis": {
       "enabled": true,
       "params": {
         "llm": {
-          "prompt_file": "trc/prompts/participant_role_analysis.md"
-        }
-      }
-    },
-    "participant_knowledge_analysis": {
-      "enabled": true,
-      "params": {
-        "llm": {
-          "prompt_file": "trc/prompts/participant_knowledge_analysis.md"
+          "prompt_file": "trc/prompts/participant_analysis.md"
         }
       }
     },
