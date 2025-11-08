@@ -202,6 +202,16 @@ def parse_filename(filename: str) -> tuple[str | None, str | None]:
 
 
 @dataclass
+class StageLog:
+    name: str
+    status: str
+    duration_s: float
+    input_info: str = ""
+    output_info: str = ""
+    messages: list[str] = field(default_factory=list)
+
+
+@dataclass
 class PipelineResult:
     incident_id: str
     trc_id: str
