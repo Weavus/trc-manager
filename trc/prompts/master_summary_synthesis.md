@@ -1,6 +1,6 @@
 ---
 description: "Synthesizes multiple technical recovery call summaries into a comprehensive master summary."
-model_id_ref: "openai/gpt-4o"
+model_id_ref: "openai/gpt-5-mini"
 force_json_output: false
 parameters:
   temperature: 0.1

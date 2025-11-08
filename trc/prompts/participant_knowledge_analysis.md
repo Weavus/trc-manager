@@ -1,6 +1,6 @@
 ---
 description: "Analyzes meeting transcripts to identify participants' areas of technical expertise."
-model_id_ref: "openai/gpt-4o-mini"
+model_id_ref: "openai/gpt-5-mini"
 force_json_output: true
 parameters:
   temperature: 0.3

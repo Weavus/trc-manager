@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from ..llm import create_client_from_config
+from ..llm import create_client_from_config, PromptTemplate
 from .base import RunContext, StageOutput
 
 logger = logging.getLogger(__name__)
@@ -29,10 +29,23 @@ class SummarisationStage:
                 llm_client = create_client_from_config(ctx.llm_config or {})
                 prompt_file = llm_config["prompt_file"]
 
-                summary = llm_client.call_llm_with_prompt_file(
-                    prompt_file=prompt_file,
-                    transcript=text,
-                ).strip()
+                template = PromptTemplate(prompt_file)
+                rendered_prompt = template.render(transcript=text)
+                params = template.get_llm_params()
+
+                if logger.isEnabledFor(logging.DEBUG):
+                    # Save debug input
+                    out_dir = ctx.artifacts_dir / ctx.incident_id / ctx.trc_id
+                    out_dir.mkdir(parents=True, exist_ok=True)
+                    input_file = out_dir / f"summarisation.{ctx.incident_id}.input"
+                    input_file.write_text(rendered_prompt, encoding="utf-8")
+
+                summary = llm_client.call_llm(prompt=rendered_prompt, **params).strip()
+
+                if logger.isEnabledFor(logging.DEBUG):
+                    # Save debug output
+                    output_file = out_dir / f"summarisation.{ctx.incident_id}.output"
+                    output_file.write_text(summary, encoding="utf-8")
 
                 incident_title = ctx.incident.get("title") or None
                 title: str | None = None

@@ -5,7 +5,7 @@ import logging
 import re
 from typing import Any
 
-from ..llm import create_client_from_config
+from ..llm import create_client_from_config, PromptTemplate
 from .base import RunContext, StageOutput
 
 logger = logging.getLogger(__name__)
@@ -42,11 +42,23 @@ class ParticipantKnowledgeAnalysisStage:
                     else "No roles identified yet."
                 )
 
-                payload = llm_client.call_llm_json_with_prompt_file(
-                    prompt_file=prompt_file,
-                    transcript=text,
-                    existing_roles=roles_context,
-                )
+                template = PromptTemplate(prompt_file)
+                rendered_prompt = template.render(transcript=text, existing_roles=roles_context)
+                params = template.get_llm_params()
+
+                if logger.isEnabledFor(logging.DEBUG):
+                    # Save debug input
+                    out_dir = ctx.artifacts_dir / ctx.incident_id / ctx.trc_id
+                    out_dir.mkdir(parents=True, exist_ok=True)
+                    input_file = out_dir / f"participant_knowledge_analysis.{ctx.incident_id}.input"
+                    input_file.write_text(rendered_prompt, encoding="utf-8")
+
+                payload = llm_client.call_llm_json(prompt=rendered_prompt, **params)
+
+                if logger.isEnabledFor(logging.DEBUG):
+                    # Save debug output
+                    output_file = out_dir / f"participant_knowledge_analysis.{ctx.incident_id}.output"
+                    output_file.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
                 knowledge = payload.get("knowledge", [])
                 logger.debug(f"LLM identified {len(knowledge)} knowledge entries")

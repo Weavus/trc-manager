@@ -1,6 +1,6 @@
 ---
 description: "Analyzes a single participant's dialogue to infer their role."
-model_id_ref: "google/gemini-2.5-flash"
+model_id_ref: "openai/gpt-5-mini"
 force_json_output: true
 parameters:
   temperature: 0.2

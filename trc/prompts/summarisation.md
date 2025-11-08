@@ -1,6 +1,6 @@
 ---
 description: "Generates a comprehensive and actionable summary of an incident meeting."
-model_id_ref: "google/gemini-2.5-flash"
+model_id_ref: "openai/gpt-5-mini"
 force_json_output: false
 parameters:
   temperature: 0.2

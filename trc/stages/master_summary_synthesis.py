@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from ..llm import create_client_from_config
+from ..llm import create_client_from_config, PromptTemplate
 from .base import RunContext, StageOutput
 
 logger = logging.getLogger(__name__)
@@ -37,10 +37,23 @@ class MasterSummarySynthesisStage:
                     f"TRC {i + 1}:\n{summary}" for i, summary in enumerate(summaries)
                 )
 
-                master_summary = llm_client.call_llm_with_prompt_file(
-                    prompt_file=prompt_file,
-                    summaries=summaries_text,
-                ).strip()
+                template = PromptTemplate(prompt_file)
+                rendered_prompt = template.render(summaries=summaries_text)
+                params = template.get_llm_params()
+
+                if logger.isEnabledFor(logging.DEBUG):
+                    # Save debug input
+                    out_dir = ctx.artifacts_dir / ctx.incident_id / ctx.trc_id
+                    out_dir.mkdir(parents=True, exist_ok=True)
+                    input_file = out_dir / f"master_summary_synthesis.{ctx.incident_id}.input"
+                    input_file.write_text(rendered_prompt, encoding="utf-8")
+
+                master_summary = llm_client.call_llm(prompt=rendered_prompt, **params).strip()
+
+                if logger.isEnabledFor(logging.DEBUG):
+                    # Save debug output
+                    output_file = out_dir / f"master_summary_synthesis.{ctx.incident_id}.output"
+                    output_file.write_text(master_summary, encoding="utf-8")
 
                 logger.info(
                     f"Master summary synthesis completed using LLM: {len(master_summary)} chars output"

@@ -5,7 +5,7 @@ import logging
 import re
 from typing import Any
 
-from ..llm import create_client_from_config
+from ..llm import create_client_from_config, PromptTemplate
 from .base import RunContext, StageOutput
 
 logger = logging.getLogger(__name__)
@@ -63,11 +63,23 @@ class NoiseReductionStage:
                 else:
                     known_terms = "No specific terms provided."
 
-                cleaned_text = llm_client.call_llm_with_prompt_file(
-                    prompt_file=prompt_file,
-                    known_terms=known_terms,
-                    transcript=text,
-                ).strip()
+                template = PromptTemplate(prompt_file)
+                rendered_prompt = template.render(known_terms=known_terms, transcript=text)
+                params = template.get_llm_params()
+
+                if logger.isEnabledFor(logging.DEBUG):
+                    # Save debug input
+                    out_dir = ctx.artifacts_dir / ctx.incident_id / ctx.trc_id
+                    out_dir.mkdir(parents=True, exist_ok=True)
+                    input_file = out_dir / f"noise_reduction.{ctx.incident_id}.input"
+                    input_file.write_text(rendered_prompt, encoding="utf-8")
+
+                cleaned_text = llm_client.call_llm(prompt=rendered_prompt, **params).strip()
+
+                if logger.isEnabledFor(logging.DEBUG):
+                    # Save debug output
+                    output_file = out_dir / f"noise_reduction.{ctx.incident_id}.output"
+                    output_file.write_text(cleaned_text, encoding="utf-8")
 
                 logger.info(
                     f"Noise reduction completed using LLM: {len(cleaned_text)} chars output"
