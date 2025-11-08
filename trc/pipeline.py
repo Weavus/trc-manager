@@ -42,14 +42,7 @@ def _parse_iso_datetime_safe(s: str) -> datetime | None:
     return None
 
 
-@dataclass
-class StageLog:
-    name: str
-    status: str
-    duration_s: float
-    input_info: str = ""
-    output_info: str = ""
-    messages: list[str] = field(default_factory=list)
+_logging_initialized = False
 
 
 def setup_logging(log_path: Path = Path("app.log"), level: str = "INFO") -> None:
@@ -59,6 +52,11 @@ def setup_logging(log_path: Path = Path("app.log"), level: str = "INFO") -> None
         log_path: Path to log file
         level: Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
     """
+    global _logging_initialized
+    if _logging_initialized:
+        return
+    _logging_initialized = True
+
     # Convert string level to logging level
     numeric_level = getattr(logging, level.upper(), logging.INFO)
 
